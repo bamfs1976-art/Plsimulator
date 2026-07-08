@@ -20,7 +20,8 @@ matchday.
 
 ## Requirements
 
-Python 3.8+. Nothing else — the standard library only.
+Python 3.8+. The CLI needs nothing else — the standard library only.
+The optional web dashboard needs `pip install streamlit`.
 
 ## Quick start
 
@@ -46,6 +47,13 @@ python3 -m plsim season --quiet         # final table only
 python3 -m plsim montecarlo --sims 10000
 python3 -m plsim montecarlo --sims 100000 --dixon-coles
 python3 -m plsim montecarlo --sims 20000 --positions   # full 20x20 position matrix
+
+# Fit ratings from real 2023-26 results, then simulate with them
+python3 -m plsim calibrate
+python3 -m plsim montecarlo --sims 50000 --teams teams_calibrated.json
+
+# Interactive web dashboard (needs: pip install streamlit)
+streamlit run dashboard.py
 ```
 
 All commands accept `--seed N` for reproducible runs and
@@ -102,6 +110,43 @@ League tables use the Premier League tie-breakers (points, goal
 difference, goals scored); head-to-head is approximated alphabetically,
 which is statistically neutral across large runs.
 
+## Calibrating ratings from real results
+
+`python3 -m plsim calibrate` fits all three rating columns from actual
+match data instead of the hand-set defaults:
+
+- **Source:** the public-domain
+  [openfootball/england](https://github.com/openfootball/england) dataset —
+  Premier League *and* Championship results for 2023-24, 2024-25 and
+  2025-26 (2,796 matches). Files are cached in `data/` (committed here),
+  so `--no-download` re-fits fully offline.
+- **Attack/defence** come from a weighted iterative Poisson
+  maximum-likelihood fit (`goals ~ base × attack(scorer) ×
+  defence(conceder)`, separate home/away baselines). Both divisions are
+  fitted **jointly**, so the promoted clubs' Championship goals are
+  anchored to Premier League level through the clubs that moved between
+  divisions. Recent seasons weigh more (weight halves per season back),
+  and each club's rating is shrunk toward league-average in proportion
+  to its weighted match count.
+- **Elo** comes from a chronological Elo pass (K=24, +60 home) over the
+  same matches. Note: a dominant Championship season inflates a promoted
+  club's Elo more than its Poisson ratings, because Elo only sees
+  win/loss while the joint Poisson fit prices in opponent quality — with
+  calibrated ratings, prefer the default `poisson` model.
+
+The output (`teams_calibrated.json`) plugs straight into any command via
+`--teams`, and into the dashboard via its sidebar checkbox.
+
+## Web dashboard
+
+`streamlit run dashboard.py` (after `pip install streamlit`) opens an
+interactive dashboard with four tabs: a Monte Carlo lab (up to 1,000,000
+seasons, with title/relegation probability charts and a finishing-position
+heatmap), a matchday explorer, a full-season player with
+matchday-by-matchday tables, and the ratings view. The sidebar switches
+model, Dixon-Coles, strength noise, seed, and ratings source (defaults,
+`teams_calibrated.json`, or an uploaded JSON).
+
 ## Customising teams and ratings
 
 Copy the ratings from `plsim/teams.py` into a JSON file, tweak, and pass
@@ -137,7 +182,12 @@ plsim/
   models.py     # Poisson & Elo models, Dixon-Coles, score grids
   table.py      # league table + PL tie-breakers
   simulate.py   # season simulation + multiprocess Monte Carlo engine
-  cli.py        # argparse CLI (teams/fixtures/matchday/season/montecarlo)
+  calibrate.py  # rating fit from historical results (openfootball)
+  cli.py        # argparse CLI (teams/fixtures/matchday/season/
+                #               montecarlo/calibrate)
+dashboard.py    # Streamlit web dashboard (optional)
+data/           # cached openfootball results used by `calibrate`
+teams_calibrated.json  # pre-fitted ratings from 2023-26 results
 tests/
   test_plsim.py
 ```

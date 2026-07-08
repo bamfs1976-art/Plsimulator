@@ -100,5 +100,85 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(a.points_sum, b.points_sum)
 
 
+class CalibrateParserTests(unittest.TestCase):
+    V_FORMAT = """\
+= English Premier League 2025/26
+
+# Teams      20
+
+▪ Matchday 1
+  Fri Aug 15 2025
+    20:00  Liverpool FC            v AFC Bournemouth          4-2 (1-0)
+  Sat Aug 16
+    12:30  Aston Villa FC          v Newcastle United FC      0-0
+           Brighton & Hove Albion FC v Fulham FC                1-1 (0-0)
+"""
+
+    MID_FORMAT = """\
+= English Premier League 2023/24
+
+▪ Matchday 1
+Fri Aug 11
+  20:00  Burnley FC               0-3 (0-2)  Manchester City FC
+Sat Aug 12
+         Brighton & Hove Albion FC  4-1 (1-0)  Luton Town FC
+"""
+
+    PLAYOFFS = """\
+= Championship 2025/26
+
+▪ Matchday 46
+  Sat May 2
+    12:30  Hull City AFC           v Norwich City FC          2-1 (1-1)
+
+▪ Playoffs
+  Fri May 8
+    20:00  Hull City AFC           v Millwall FC              0-0
+"""
+
+    def test_v_format(self):
+        from plsim.calibrate import parse_matches
+        got = list(parse_matches(self.V_FORMAT))
+        self.assertEqual(got, [
+            (1, "Liverpool FC", "AFC Bournemouth", 4, 2),
+            (1, "Aston Villa FC", "Newcastle United FC", 0, 0),
+            (1, "Brighton & Hove Albion FC", "Fulham FC", 1, 1),
+        ])
+
+    def test_mid_score_format(self):
+        from plsim.calibrate import parse_matches
+        got = list(parse_matches(self.MID_FORMAT))
+        self.assertEqual(got, [
+            (1, "Burnley FC", "Manchester City FC", 0, 3),
+            (1, "Brighton & Hove Albion FC", "Luton Town FC", 4, 1),
+        ])
+
+    def test_playoffs_excluded(self):
+        from plsim.calibrate import parse_matches
+        got = list(parse_matches(self.PLAYOFFS))
+        self.assertEqual(got, [(46, "Hull City AFC", "Norwich City FC", 2, 1)])
+
+    def test_calibrate_from_cached_data(self):
+        import os
+        if not os.path.isdir("data"):
+            self.skipTest("no cached data/ directory")
+        from plsim.calibrate import calibrate
+        ratings, info = calibrate(download=False)
+        self.assertEqual(len(ratings), 20)
+        self.assertEqual(info["matches"], 2796)
+        for r in ratings.values():
+            self.assertGreater(r["attack"], 0.3)
+            self.assertLess(r["attack"], 2.0)
+            self.assertGreater(r["defence"], 0.3)
+            self.assertLess(r["defence"], 2.0)
+        # The fit should still rank Arsenal well above Hull.
+        self.assertGreater(ratings["Arsenal"]["attack"],
+                           ratings["Hull City"]["attack"])
+        self.assertLess(ratings["Arsenal"]["defence"],
+                        ratings["Hull City"]["defence"])
+        self.assertGreater(ratings["Arsenal"]["elo"],
+                           ratings["Hull City"]["elo"])
+
+
 if __name__ == "__main__":
     unittest.main()

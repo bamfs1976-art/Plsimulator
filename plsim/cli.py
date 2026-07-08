@@ -6,6 +6,7 @@ import sys
 import time
 
 from . import models, simulate
+from .calibrate import DEFAULT_SEASONS
 from .fixtures import generate_fixtures, matchday_date
 from .table import LeagueTable
 from .teams import load_teams
@@ -155,6 +156,32 @@ def cmd_montecarlo(args):
             print(f"{t:<20}{row}")
 
 
+def cmd_calibrate(args):
+    """Fit ratings from historical results and write a --teams JSON."""
+    from . import calibrate as cal
+
+    print(f"Fitting ratings from seasons: {', '.join(args.seasons)}")
+    ratings, info = cal.calibrate(
+        seasons=args.seasons, cache_dir=args.cache_dir,
+        download=not args.no_download,
+    )
+    print(f"Fitted {info['matches']} matches "
+          f"(baselines: {info['base_home']:.2f} home / {info['base_away']:.2f} away goals)\n")
+
+    defaults = load_teams()
+    header = (f"{'Team':<20} {'Attack':>7} {'Defence':>8} {'Elo':>6}   "
+              f"{'(default':>9} {'att':>5} {'def':>5} {'elo)':>6}")
+    print(header)
+    print("-" * len(header))
+    for name in sorted(ratings, key=lambda t: -ratings[t]["elo"]):
+        r, d = ratings[name], defaults[name]
+        print(f"{name:<20} {r['attack']:>7.2f} {r['defence']:>8.2f} {r['elo']:>6.0f}   "
+              f"{'':>9} {d['attack']:>5.2f} {d['defence']:>5.2f} {d['elo']:>6.0f}")
+
+    cal.write_ratings(ratings, args.out)
+    print(f"\nWrote {args.out} - use it with:  python3 -m plsim montecarlo --teams {args.out}")
+
+
 # ---------------------------------------------------------------- parser
 
 
@@ -214,6 +241,19 @@ def build_parser():
     p.add_argument("--positions", action="store_true",
                    help="print the full 20x20 finishing-position matrix")
     p.set_defaults(func=cmd_montecarlo)
+
+    p = sub.add_parser("calibrate",
+                       help="fit ratings from historical results (openfootball)")
+    p.add_argument("--out", default="teams_calibrated.json", metavar="JSON",
+                   help="output ratings file (default: teams_calibrated.json)")
+    p.add_argument("--seasons", nargs="+", metavar="YYYY-YY",
+                   default=list(DEFAULT_SEASONS),
+                   help="seasons to fit, oldest first (default: 2023-24 2024-25 2025-26)")
+    p.add_argument("--cache-dir", default="data", metavar="DIR",
+                   help="where downloaded results are cached (default: data/)")
+    p.add_argument("--no-download", action="store_true",
+                   help="use cached files only, never hit the network")
+    p.set_defaults(func=cmd_calibrate)
 
     return parser
 
