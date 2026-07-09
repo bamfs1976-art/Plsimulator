@@ -208,6 +208,19 @@ class BacktestTests(unittest.TestCase):
             self.assertLess(by_name[v]["rps"], by_name["uniform"]["rps"])
         self.assertIn(winner.name, bt.VARIANTS)
 
+    def test_promoted_adjust_grades_by_div2_share(self):
+        from plsim.calibrate import promoted_adjust, PROMOTED_ATT
+        matches = [
+            {"home": "A", "away": "B", "division": 2},   # A,B: all div-2
+            {"home": "C", "away": "D", "division": 1},   # C,D: all div-1
+        ]
+        att = {t: 1.0 for t in "ABCD"}
+        dfn = {t: 1.0 for t in "ABCD"}
+        promoted_adjust(att, dfn, matches, [1.0, 1.0])
+        self.assertAlmostEqual(att["A"], PROMOTED_ATT)   # full share
+        self.assertAlmostEqual(att["C"], 1.0)            # untouched
+        self.assertGreater(dfn["B"], 1.0)
+
     def test_calibrated_file_has_home_and_meta(self):
         import os
         if not os.path.exists("teams_calibrated.json"):

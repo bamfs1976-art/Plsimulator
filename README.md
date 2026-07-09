@@ -134,7 +134,21 @@ Measured on the 380 matches of 2025/26 (lower is better):
 | **+ decay + fitted rho + home adv** | **0.2126** | **1.0377** | **0.1808** |
 
 For scale: bookmaker closing odds typically score ~0.19–0.20 RPS on the
-Premier League, so a goals-only model at 0.2126 is solid. The backtest
+Premier League, so a goals-only model at 0.2126 is solid. Blending
+FPL's official team xG into the fit target (`0.4*xG + 0.6*goals`,
+swept 0–1 through the harness) improves it further to **0.2123** with
+the best clean-sheet Brier (0.1802); pure xG is *worse* than pure goals.
+
+**A negative result worth recording:** promoted clubs' first-PL-season
+performance is dramatically below what a naive single-season joint fit
+implies (attack ×0.59, defence ×1.57 — measured over 28 promoted-club
+seasons, 2016–26; `calibrate.promoted_adjust` implements the
+correction). But the walk-forward backtest **rejects** applying it here
+— overall RPS worsens 0.2123 → 0.2213 and promoted-club matches worsen
+0.2088 → 0.2403, with even quarter-strength versions losing. The
+multi-season decay-weighted joint fit already prices promotion in;
+the adjustment double-counts. It stays in the codebase as an opt-in
+research finding for single-season fits, not a default. The backtest
 drove three calibration choices now baked in as defaults: exponential
 **date decay** with a 250-day half-life (beats longer half-lives, ties
 season steps on the holdout, and keeps working mid-season), a

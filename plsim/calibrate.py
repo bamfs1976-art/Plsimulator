@@ -41,6 +41,10 @@ SHRINK_MATCHES = 15.0       # weighted matches at which att/def shrinkage is 50/
 HOME_PRIOR_MATCHES = 12.0   # pseudo-matches anchoring each club's home factor at 1.0
 RHO_RANGE = (-0.30, 0.10)   # search window for the Dixon-Coles correlation
 XG_ALPHA = 0.4              # xG share of the fit target (backtest-validated)
+# First-PL-season factors for promoted clubs vs their Championship-implied
+# ratings, estimated over 28 promoted-club seasons 2016-26 (see README):
+PROMOTED_ATT = 0.59
+PROMOTED_DEF = 1.57
 ELO_K = 24.0
 ELO_HOME = 60.0
 ELO_START = 1500.0
@@ -348,6 +352,30 @@ def fit_poisson(matches, weights, iterations=FIT_ITERATIONS, home_adv=True,
         base_h *= mean_att * mean_dfn * mean_hom
         base_a *= mean_att * mean_dfn
     return att, dfn, hom, base_h, base_a
+
+
+def promoted_adjust(att, dfn, matches, weights):
+    """Adjust ratings for clubs whose evidence is mostly Championship play.
+
+    Promoted clubs systematically underperform what a joint two-division
+    fit implies for them (attack ~x0.59, defence ~x1.57 in their first
+    PL season, measured over 28 club-seasons 2016-26). The adjustment is
+    graded by each club's Championship share of weighted evidence, so it
+    applies fully at season start and fades to nothing as real Premier
+    League results accumulate. Modifies att/dfn in place.
+    """
+    div2 = {}
+    total = {}
+    for w, m in zip(weights, matches):
+        for team in (m["home"], m["away"]):
+            total[team] = total.get(team, 0.0) + w
+            if m["division"] == 2:
+                div2[team] = div2.get(team, 0.0) + w
+    for team in att:
+        share = div2.get(team, 0.0) / (total.get(team, 0.0) or 1.0)
+        if share > 0:
+            att[team] *= PROMOTED_ATT ** share
+            dfn[team] *= PROMOTED_DEF ** share
 
 
 def _dc_tau(h, a, lam_h, lam_a, rho):
