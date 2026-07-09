@@ -26,6 +26,8 @@ Variants build on each other, so adjacent rows isolate one change:
                        the match date (see DECAY_HALF_LIFE_DAYS).
 4. ``+fitted-rho``   — fits rho by maximum likelihood instead of fixing it.
 5. ``+home-adv``     — adds per-club home-advantage multipliers.
+6. ``+xg-blend``     — fit target becomes 0.4*xG + 0.6*goals where team
+                       xG is available (see tools/build_xg.py).
 
 Plus reference points: ``uniform`` (1/3 each), ``home-rates`` (the
 training set's overall H/D/A frequencies for every match), and ``elo``
@@ -103,7 +105,8 @@ def _season_step_weights(matches, n_seasons):
     return [SEASON_STEP ** (n_seasons - 1 - m["season_idx"]) for m in matches]
 
 
-VARIANTS = ("season-step", "+dixon-coles", "+date-decay", "+fitted-rho", "+home-adv")
+VARIANTS = ("season-step", "+dixon-coles", "+date-decay", "+fitted-rho",
+            "+home-adv", "+xg-blend")
 
 
 def _fit_variant(variant, train, n_seasons, cutoff):
@@ -112,10 +115,12 @@ def _fit_variant(variant, train, n_seasons, cutoff):
         weights = _season_step_weights(train, n_seasons)
     else:
         weights = cal.decay_weights(train, reference_date=cutoff)
-    home_adv = variant == "+home-adv"
+    home_adv = variant in ("+home-adv", "+xg-blend")
+    xg_alpha = cal.XG_ALPHA if variant == "+xg-blend" else 0.0
     att, dfn, hom, base_h, base_a = cal.fit_poisson(
-        train, weights, iterations=BT_ITERATIONS, home_adv=home_adv)
-    if variant in ("+fitted-rho", "+home-adv"):
+        train, weights, iterations=BT_ITERATIONS, home_adv=home_adv,
+        xg_alpha=xg_alpha)
+    if variant in ("+fitted-rho", "+home-adv", "+xg-blend"):
         rho = cal.fit_rho(train, weights, att, dfn, hom, base_h, base_a)
     elif variant == "season-step":
         rho = None
@@ -148,6 +153,7 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
     ``every`` > 1 evaluates only every n-th matchday (quick mode).
     """
     matches = cal.load_matches(seasons, cache_dir, download)
+    cal.attach_xg(matches, cache_dir)
     target = target or seasons[-1]
     if target not in {m["season"] for m in matches}:
         raise ValueError(f"season {target!r} not in the loaded data")

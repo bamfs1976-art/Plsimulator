@@ -40,6 +40,7 @@ FIT_ITERATIONS = 60
 SHRINK_MATCHES = 15.0       # weighted matches at which att/def shrinkage is 50/50
 HOME_PRIOR_MATCHES = 12.0   # pseudo-matches anchoring each club's home factor at 1.0
 RHO_RANGE = (-0.30, 0.10)   # search window for the Dixon-Coles correlation
+XG_ALPHA = 0.4              # xG share of the fit target (backtest-validated)
 ELO_K = 24.0
 ELO_HOME = 60.0
 ELO_START = 1500.0
@@ -220,6 +221,46 @@ def load_matches(seasons=DEFAULT_SEASONS, cache_dir="data", download=True):
     return matches
 
 
+# openfootball names for clubs relegated since 2023 (xG join only)
+_OF_EXTRA = {
+    "Wolverhampton Wanderers FC": "Wolves", "West Ham United FC": "West Ham",
+    "Burnley FC": "Burnley", "Luton Town FC": "Luton",
+    "Sheffield United FC": "Sheffield United",
+    "Leicester City FC": "Leicester", "Southampton FC": "Southampton",
+}
+
+
+def _canon(name):
+    return NAME_MAP.get(name) or _OF_EXTRA.get(name) or name
+
+
+def attach_xg(matches, cache_dir="data"):
+    """Attach per-match team xG (m['hxg'], m['axg']) where files exist.
+
+    xG comes from FPL's official per-player expected-goals, summed to
+    team level per fixture (see tools/build_xg.py). Returns the number
+    of matches that got xG attached.
+    """
+    import csv
+
+    by_season = {}
+    for season in {m["season"] for m in matches}:
+        path = os.path.join(cache_dir, f"xg-{season}.csv")
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            for r in csv.DictReader(fh):
+                by_season[(season, r["home"], r["away"])] = (
+                    float(r["hxg"]), float(r["axg"]))
+    hit = 0
+    for m in matches:
+        xg = by_season.get((m["season"], _canon(m["home"]), _canon(m["away"])))
+        if xg:
+            m["hxg"], m["axg"] = xg
+            hit += 1
+    return hit
+
+
 def decay_weights(matches, reference_date=None, half_life=DECAY_HALF_LIFE_DAYS):
     """Exponential time-decay weight per match, relative to reference_date.
 
@@ -240,7 +281,8 @@ def decay_weights(matches, reference_date=None, half_life=DECAY_HALF_LIFE_DAYS):
     return weights
 
 
-def fit_poisson(matches, weights, iterations=FIT_ITERATIONS, home_adv=True):
+def fit_poisson(matches, weights, iterations=FIT_ITERATIONS, home_adv=True,
+                xg_alpha=0.0):
     """Weighted iterative Poisson fit.
 
     Returns (attack, defence, home, base_h, base_a): attack/defence dicts
@@ -248,14 +290,26 @@ def fit_poisson(matches, weights, iterations=FIT_ITERATIONS, home_adv=True):
     multiplier (mean 1.0, shrunk toward 1 by HOME_PRIOR_MATCHES
     pseudo-matches); base_h/base_a are the fitted average home/away goal
     rates between two average sides on neutral home advantage.
+
+    With ``xg_alpha`` > 0 the fit target for matches that carry xG (see
+    attach_xg) becomes ``alpha*xG + (1-alpha)*goals`` — xG has far more
+    signal per match than goals, so blending reduces noise. Matches
+    without xG (e.g. the Championship) keep plain goals.
     """
     teams = sorted({m["home"] for m in matches} | {m["away"] for m in matches})
+    targets = []
+    for m in matches:
+        if xg_alpha and m.get("hxg") is not None:
+            targets.append((xg_alpha * m["hxg"] + (1 - xg_alpha) * m["hg"],
+                            xg_alpha * m["axg"] + (1 - xg_alpha) * m["ag"]))
+        else:
+            targets.append((float(m["hg"]), float(m["ag"])))
     att = {t: 1.0 for t in teams}
     dfn = {t: 1.0 for t in teams}
     hom = {t: 1.0 for t in teams}
     w_total = sum(weights) or 1.0
-    base_h = sum(w * m["hg"] for w, m in zip(weights, matches)) / w_total
-    base_a = sum(w * m["ag"] for w, m in zip(weights, matches)) / w_total
+    base_h = sum(w * t[0] for w, t in zip(weights, targets)) / w_total
+    base_a = sum(w * t[1] for w, t in zip(weights, targets)) / w_total
 
     for _ in range(iterations):
         scored = {t: 0.0 for t in teams}
@@ -264,19 +318,19 @@ def fit_poisson(matches, weights, iterations=FIT_ITERATIONS, home_adv=True):
         exp_conceded = {t: 1e-9 for t in teams}
         h_goals = {t: HOME_PRIOR_MATCHES * base_h for t in teams}
         h_exp = {t: HOME_PRIOR_MATCHES * base_h * hom[t] for t in teams}
-        for w, m in zip(weights, matches):
+        for w, m, (tg_h, tg_a) in zip(weights, matches, targets):
             home, away = m["home"], m["away"]
             lam_h = base_h * att[home] * dfn[away] * hom[home]
             lam_a = base_a * att[away] * dfn[home]
-            scored[home] += w * m["hg"]
+            scored[home] += w * tg_h
             exp_scored[home] += w * lam_h
-            scored[away] += w * m["ag"]
+            scored[away] += w * tg_a
             exp_scored[away] += w * lam_a
-            conceded[home] += w * m["ag"]
+            conceded[home] += w * tg_a
             exp_conceded[home] += w * lam_a
-            conceded[away] += w * m["hg"]
+            conceded[away] += w * tg_h
             exp_conceded[away] += w * lam_h
-            h_goals[home] += w * m["hg"]
+            h_goals[home] += w * tg_h
             h_exp[home] += w * lam_h
         for t in teams:
             att[t] *= math.sqrt(scored[t] / exp_scored[t])
@@ -358,7 +412,7 @@ def fit_elo(matches):
 
 
 def calibrate(seasons=DEFAULT_SEASONS, cache_dir="data", download=True,
-              half_life=DECAY_HALF_LIFE_DAYS):
+              half_life=DECAY_HALF_LIFE_DAYS, xg_alpha=XG_ALPHA):
     """Fit ratings for the 20 2026/27 clubs -> (ratings dict, info dict).
 
     The ratings dict carries attack/defence/home/elo per club plus a
@@ -372,8 +426,10 @@ def calibrate(seasons=DEFAULT_SEASONS, cache_dir="data", download=True,
     if missing:
         raise RuntimeError(f"no match data found for: {', '.join(missing)}")
 
+    xg_hit = attach_xg(matches, cache_dir)
     weights = decay_weights(matches, half_life=half_life)
-    att, dfn, hom, base_h, base_a = fit_poisson(matches, weights)
+    att, dfn, hom, base_h, base_a = fit_poisson(matches, weights,
+                                                xg_alpha=xg_alpha)
     rho = fit_rho(matches, weights, att, dfn, hom, base_h, base_a)
     elo = fit_elo(matches)
 
@@ -414,6 +470,8 @@ def calibrate(seasons=DEFAULT_SEASONS, cache_dir="data", download=True,
         "base_away": base_a,
         "rho": rho,
         "half_life_days": half_life,
+        "xg_alpha": xg_alpha if xg_hit else 0.0,
+        "xg_matches": xg_hit,
     }
     return ratings, info
 

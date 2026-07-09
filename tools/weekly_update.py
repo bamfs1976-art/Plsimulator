@@ -61,6 +61,14 @@ def main():
         print(f"{seasons[-1]} not available yet ({exc}); falling back")
         seasons = [season_string(int(s.split('-')[0]) - 1) for s in seasons]
 
+    # Refresh team-xG files (best effort - a vaastav outage must not
+    # break the weekly refit; the fit falls back to goals-only).
+    try:
+        subprocess.run([sys.executable, "tools/build_xg.py", *seasons[-2:]],
+                       check=True, timeout=600)
+    except Exception as exc:  # noqa: BLE001
+        print(f"xG refresh skipped: {exc}")
+
     print(f"calibrating on: {', '.join(seasons)}")
     ratings, info = cal.calibrate(seasons=seasons)
     cal.write_ratings(ratings, "teams_calibrated.json", info)
