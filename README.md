@@ -133,11 +133,24 @@ Measured on the 380 matches of 2025/26 (lower is better):
 | Poisson, season-step weights | 0.2133 | 1.0410 | 0.1811 |
 | **+ decay + fitted rho + home adv** | **0.2126** | **1.0377** | **0.1808** |
 
-For scale: bookmaker closing odds typically score ~0.19–0.20 RPS on the
-Premier League, so a goals-only model at 0.2126 is solid. Blending
-FPL's official team xG into the fit target (`0.4*xG + 0.6*goals`,
-swept 0–1 through the harness) improves it further to **0.2123** with
-the best clean-sheet Brier (0.1802); pure xG is *worse* than pure goals.
+Blending FPL's official team xG into the fit target (`0.4*xG +
+0.6*goals`, swept 0–1 through the harness) improves the full config to
+**0.2123** with the best clean-sheet Brier (0.1802); pure xG is *worse*
+than pure goals.
+
+**Head to head with the market:** on the 210 matches of 2025/26 with
+Pinnacle closing odds (de-vigged; from the football-data.co.uk mirror at
+[AnishKhetani/premier-league-data](https://github.com/AnishKhetani/premier-league-data),
+compacted by `tools/build_odds.py` into `data/odds-*.csv`), the model
+scores RPS **0.2068** vs the market's **0.1994** — about 0.007 behind
+the sharpest public forecast in existence, from goals + xG alone.
+Blending model probabilities toward the market improves accuracy
+monotonically but never beats pure closing odds, so the recommendation
+is honest: when closing odds exist (i.e. at kickoff), defer to them;
+the model's value is every horizon where odds don't exist yet —
+multi-gameweek fixture planning, full scoreline grids (clean sheets,
+3+ goals), and season-long Monte Carlo. The `backtest` command reports
+this comparison automatically whenever the odds files are present.
 
 **A negative result worth recording:** promoted clubs' first-PL-season
 performance is dramatically below what a naive single-season joint fit

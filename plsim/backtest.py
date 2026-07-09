@@ -32,6 +32,13 @@ Variants build on each other, so adjacent rows isolate one change:
 Plus reference points: ``uniform`` (1/3 each), ``home-rates`` (the
 training set's overall H/D/A frequencies for every match), and ``elo``
 (the Elo-driven model).
+
+When ``data/odds-SEASON.csv`` exists (see tools/build_odds.py), the run
+also reports a **market comparison**: the best variant and de-vigged
+Pinnacle closing odds scored head-to-head on the matches where closing
+odds exist. Closing odds are the strongest public forecast, so this is
+the honest ceiling; note they only exist at kickoff, while the model
+forecasts any horizon.
 """
 
 import datetime
@@ -155,6 +162,7 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
     matches = cal.load_matches(seasons, cache_dir, download)
     cal.attach_xg(matches, cache_dir)
     target = target or seasons[-1]
+    odds = _load_odds(target, cache_dir)
     if target not in {m["season"] for m in matches}:
         raise ValueError(f"season {target!r} not in the loaded data")
     n_seasons = len(seasons)
@@ -167,6 +175,7 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
     scores["uniform"] = Scores("uniform")
     scores["home-rates"] = Scores("home-rates")
     scores["elo"] = Scores("elo")
+    mk_model, mk_odds = Scores("model (odds subset)"), Scores("pinnacle closing")
 
     for done, md in enumerate(matchdays):
         group = [m for m in test if m["matchday"] == md]
@@ -211,6 +220,12 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
                 probs, csh, csa = _probs_from(lam_h, lam_a, fit["rho"])
                 scores[v].add(probs, outcome,
                               ((csh, home_cs), (csa, away_cs)))
+                if v == VARIANTS[-1] and odds:
+                    po = odds.get((m["date"], cal._canon(m["home"]),
+                                   cal._canon(m["away"])))
+                    if po:
+                        mk_model.add(probs, outcome)
+                        mk_odds.add(po, outcome)
         if progress:
             progress(done + 1, len(matchdays), md)
 
@@ -218,4 +233,21 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
     summaries = [scores[k].summary() for k in order]
     winner = min((scores[v] for v in VARIANTS),
                  key=lambda s: s.summary()["rps"])
-    return summaries, winner
+    market = [mk_model.summary(), mk_odds.summary()] if mk_odds.n else None
+    return summaries, winner, market
+
+
+def _load_odds(season, cache_dir):
+    """De-vigged closing-odds probabilities keyed by (date, home, away)."""
+    import csv
+    import os
+
+    path = os.path.join(cache_dir, f"odds-{season}.csv")
+    if not os.path.exists(path):
+        return None
+    odds = {}
+    with open(path, encoding="utf-8") as fh:
+        for r in csv.DictReader(fh):
+            key = (datetime.date.fromisoformat(r["date"]), r["home"], r["away"])
+            odds[key] = (float(r["ph"]), float(r["pd"]), float(r["pa"]))
+    return odds

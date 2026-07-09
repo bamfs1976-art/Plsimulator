@@ -200,13 +200,15 @@ class BacktestTests(unittest.TestCase):
         if not os.path.isdir("data"):
             self.skipTest("no cached data/ directory")
         from plsim import backtest as bt
-        summaries, winner = bt.run(download=False, every=8)
+        summaries, winner, market = bt.run(download=False, every=8)
         by_name = {s["variant"]: s for s in summaries}
         self.assertEqual(len(by_name), 3 + len(bt.VARIANTS))
         # Every fitted variant must beat the uniform reference.
         for v in bt.VARIANTS:
             self.assertLess(by_name[v]["rps"], by_name["uniform"]["rps"])
         self.assertIn(winner.name, bt.VARIANTS)
+        if market:  # odds files present: the market should be strong
+            self.assertLess(market[1]["rps"], by_name["uniform"]["rps"])
 
     def test_promoted_adjust_grades_by_div2_share(self):
         from plsim.calibrate import promoted_adjust, PROMOTED_ATT

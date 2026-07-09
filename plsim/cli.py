@@ -203,7 +203,7 @@ def cmd_backtest(args):
     def progress(done, total, md):
         print(f"  matchday {md} scored ({done}/{total})", flush=True)
 
-    summaries, winner = bt.run(
+    summaries, winner, market = bt.run(
         seasons=args.seasons, target=args.target, cache_dir=args.cache_dir,
         download=not args.no_download, every=args.every,
         progress=progress if not args.quiet else None,
@@ -216,6 +216,13 @@ def cmd_backtest(args):
     for s in summaries:
         print(f"{s['variant']:<14} {s['matches']:>8} {s['rps']:>8.4f} "
               f"{s['logloss']:>9.4f} {s['brier']:>8.4f} {s['cs_brier']:>9.4f}")
+
+    if market:
+        print("\nVs the market — same matches, head to head "
+              f"({market[0]['matches']} with Pinnacle closing odds)")
+        for s in market:
+            print(f"  {s['variant']:<22} RPS {s['rps']:.4f}  "
+                  f"logloss {s['logloss']:.4f}")
 
     print(f"\nBest model variant by RPS: {winner.name}")
     print("\nClean-sheet calibration for the best variant")
