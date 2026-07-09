@@ -1,0 +1,6 @@
+# Static deploy: the browser-based simulator (index.html) is the site.
+# The Python engine (plsim/), Streamlit dashboard and data files live in
+# the repo but are not part of the deployed site.
+[build]
+  publish = "."
+  command = ""

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premier League 2026/27 Simulator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%232a78d6'/%3E%3Ctext x='8' y='11.5' font-size='9' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3EPL%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --surface: #ffffff; --surface-2: #f4f4f2;
+    --text-1: #1a1a19; --text-2: #55544e; --text-3: #8a887f;
+    --border: #e3e2dd;
+    --series-1: #2a78d6; --series-2: #1baf7a;
+    --accent: #2a78d6; --danger: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1a1a19; --surface-2: #242422;
+      --text-1: #ffffff; --text-2: #c3c2b7; --text-3: #8a887f;
+      --border: #3a3935;
+      --series-1: #3987e5; --series-2: #199e70;
+      --accent: #3987e5; --danger: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface); color: var(--text-1);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .sub { color: var(--text-2); margin: 0 0 20px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap; }
+  .tabs button {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    padding: 10px 14px; font: inherit; color: var(--text-2); cursor: pointer;
+  }
+  .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .panel { display: none; } .panel.active { display: block; }
+  .controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; margin-bottom: 18px; }
+  .ctl { display: flex; flex-direction: column; gap: 4px; }
+  .ctl label { font-size: 12px; color: var(--text-2); }
+  select, input[type=number] {
+    background: var(--surface); color: var(--text-1); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 10px; font: inherit; min-width: 120px;
+  }
+  .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 8px; }
+  button.primary {
+    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  th { color: var(--text-2); font-weight: 600; font-size: 12px; }
+  th.t, td.t { text-align: left; }
+  tr.cl td { box-shadow: inset 3px 0 0 var(--series-1); }
+  tr.rel td { box-shadow: inset 3px 0 0 var(--danger); }
+  .scroll { overflow-x: auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .charttitle { font-weight: 600; margin: 0 0 8px; font-size: 15px; }
+  .prog { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin: 14px 0; display: none; }
+  .prog > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  .note { color: var(--text-3); font-size: 13px; }
+  .metrics { display: flex; gap: 28px; flex-wrap: wrap; margin: 14px 0 20px; }
+  .metric .k { font-size: 12px; color: var(--text-2); }
+  .metric .v { font-size: 19px; font-weight: 650; }
+  .bar-label { font-size: 12px; fill: var(--text-2); }
+  .bar-val { font-size: 12px; fill: var(--text-1); font-weight: 600; }
+  .axis { font-size: 11px; fill: var(--text-3); }
+  section.block { margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Premier League 2026/27 Simulator</h1>
+  <p class="sub">Monte Carlo season predictions — Poisson &amp; Elo models, running entirely in your browser.
+     Full Python engine, calibration &amp; Streamlit dashboard: see the repository.</p>
+
+  <div class="controls">
+    <div class="ctl"><label for="ratings">Ratings</label>
+      <select id="ratings">
+        <option value="calibrated">Fitted from 2023–26 results</option>
+        <option value="default">Hand-set defaults</option>
+      </select></div>
+    <div class="ctl"><label for="model">Model</label>
+      <select id="model">
+        <option value="poisson">Poisson attack/defence</option>
+        <option value="elo">Elo-based</option>
+      </select></div>
+    <div class="ctl check"><input type="checkbox" id="dc" checked><label for="dc">Dixon-Coles correction</label></div>
+    <div class="ctl"><label for="seed">Seed</label><input type="number" id="seed" value="42"></div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="mc" class="active">Monte Carlo</button>
+    <button data-tab="md">Matchday</button>
+    <button data-tab="season">Full season</button>
+    <button data-tab="teams">Teams</button>
+  </div>
+
+  <div class="panel active" id="panel-mc">
+    <div class="controls">
+      <div class="ctl"><label for="sims">Seasons to simulate</label>
+        <select id="sims">
+          <option>1000</option><option>5000</option><option selected>10000</option>
+          <option>25000</option><option>50000</option><option>100000</option>
+        </select></div>
+      <button class="primary" id="run-mc">Run Monte Carlo</button>
+      <span class="note" id="mc-status"></span>
+    </div>
+    <div class="prog" id="mc-prog"><div></div></div>
+    <div id="mc-out"></div>
+  </div>
+
+  <div class="panel" id="panel-md">
+    <div class="controls">
+      <div class="ctl"><label for="mdnum">Matchday (1–38)</label>
+        <input type="number" id="mdnum" min="1" max="38" value="1"></div>
+      <button class="primary" id="run-md">Show</button>
+    </div>
+    <div id="md-out"></div>
+  </div>
+
+  <div class="panel" id="panel-season">
+    <div class="controls">
+      <button class="primary" id="run-season">Simulate one season</button>
+      <span class="note">380 fixtures, one roll of the dice — change the seed for another timeline.</span>
+    </div>
+    <div id="season-out"></div>
+  </div>
+
+  <div class="panel" id="panel-teams">
+    <div id="teams-out"></div>
+    <p class="note">Attack = scoring multiplier vs an average side. Defence = conceding multiplier (lower is better).
+       Fitted ratings come from a joint Poisson fit of 2,796 Premier League + Championship results, 2023–26.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------------- data ---------------- */
+const DEFAULT_TEAMS = {
+  "Arsenal":{attack:1.35,defence:0.70,elo:1900},"Manchester City":{attack:1.35,defence:0.76,elo:1875},
+  "Liverpool":{attack:1.26,defence:0.84,elo:1830},"Manchester United":{attack:1.16,defence:0.85,elo:1815},
+  "Chelsea":{attack:1.18,defence:0.90,elo:1800},"Aston Villa":{attack:1.12,defence:0.88,elo:1795},
+  "Newcastle United":{attack:1.12,defence:0.90,elo:1775},"Tottenham Hotspur":{attack:1.10,defence:0.97,elo:1750},
+  "Crystal Palace":{attack:1.00,defence:0.90,elo:1740},"Brighton":{attack:1.05,defence:0.98,elo:1735},
+  "Nottingham Forest":{attack:0.98,defence:0.95,elo:1715},"Bournemouth":{attack:1.03,defence:1.00,elo:1710},
+  "Brentford":{attack:1.02,defence:1.04,elo:1700},"Fulham":{attack:0.98,defence:1.00,elo:1695},
+  "Everton":{attack:0.90,defence:0.94,elo:1685},"Sunderland":{attack:0.90,defence:1.05,elo:1650},
+  "Leeds United":{attack:0.92,defence:1.08,elo:1645},"Coventry City":{attack:0.88,defence:1.12,elo:1600},
+  "Ipswich Town":{attack:0.85,defence:1.12,elo:1585},"Hull City":{attack:0.80,defence:1.18,elo:1560}
+};
+let CALIBRATED_TEAMS = null; // injected below the script if available
+const BASE_H = 1.62, BASE_A = 1.32, MAXG = 10, GRID = MAXG + 1;
+const ELO_HOME = 60, ELO_SCALE = 0.45, DC_RHO = -0.12, LN10 = Math.log(10);
+
+/* ---------------- prng ---------------- */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- fixtures (Berger) ---------------- */
+function generateFixtures(names) {
+  const teams = [...names].sort();
+  const shuffle = mulberry32(20262027);
+  for (let i = teams.length - 1; i > 0; i--) {
+    const j = Math.floor(shuffle() * (i + 1));
+    [teams[i], teams[j]] = [teams[j], teams[i]];
+  }
+  const n = teams.length, fixed = teams[0], rest = teams.slice(1);
+  const first = [];
+  for (let r = 0; r < n - 1; r++) {
+    const rot = rest.slice(r).concat(rest.slice(0, r));
+    const pairs = [r % 2 === 0 ? [fixed, rot[0]] : [rot[0], fixed]];
+    for (let i = 1; i < n / 2; i++) {
+      const a = rot[i], b = rot[rot.length - i];
+      pairs.push(i % 2 === r % 2 ? [a, b] : [b, a]);
+    }
+    first.push(pairs);
+  }
+  return first.concat(first.map(md => md.map(([h, a]) => [a, h])));
+}
+
+/* ---------------- models ---------------- */
+function lambdas(model, teams, home, away) {
+  const th = teams[home], ta = teams[away];
+  if (model === "poisson")
+    return [BASE_H * th.attack * ta.defence, BASE_A * ta.attack * th.defence];
+  const diff = th.elo - ta.elo + ELO_HOME;
+  const exp = 1 / (1 + Math.pow(10, -diff / 400));
+  const skew = ELO_SCALE * (2 * exp - 1) * LN10, half = (BASE_H + BASE_A) / 2;
+  return [half * Math.exp(skew), half * Math.exp(-skew)];
+}
+function scoreGrid(lh, la, dc) {
+  const ph = [], pa = [];
+  let fh = Math.exp(-lh), fa = Math.exp(-la);
+  for (let k = 0; k <= MAXG; k++) {
+    ph.push(fh); pa.push(fa);
+    fh = fh * lh / (k + 1); fa = fa * la / (k + 1);
+  }
+  const g = new Float64Array(GRID * GRID);
+  for (let h = 0; h < GRID; h++) for (let a = 0; a < GRID; a++) g[h * GRID + a] = ph[h] * pa[a];
+  if (dc) {
+    g[0] *= 1 - lh * la * DC_RHO;          // 0-0
+    g[1] *= 1 + lh * DC_RHO;               // 0-1
+    g[GRID] *= 1 + la * DC_RHO;            // 1-0
+    g[GRID + 1] *= 1 - DC_RHO;             // 1-1
+  }
+  let s = 0; for (const p of g) s += p;
+  for (let i = 0; i < g.length; i++) g[i] /= s;
+  return g;
+}
+function cumulative(grid) {
+  const c = new Float64Array(grid.length); let r = 0;
+  for (let i = 0; i < grid.length; i++) { r += grid[i]; c[i] = r; }
+  c[c.length - 1] = 1;
+  return c;
+}
+function sampleScore(cum, rnd) {
+  const x = rnd(); let lo = 0, hi = cum.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] < x) lo = mid + 1; else hi = mid; }
+  return [Math.floor(lo / GRID), lo % GRID];
+}
+function outcomeProbs(grid) {
+  let pH = 0, pD = 0, pA = 0;
+  for (let h = 0; h < GRID; h++) for (let a = 0; a < GRID; a++) {
+    const p = grid[h * GRID + a];
+    if (h > a) pH += p; else if (h === a) pD += p; else pA += p;
+  }
+  return [pH, pD, pA];
+}
+function likelyScore(grid) {
+  let best = 0;
+  for (let i = 1; i < grid.length; i++) if (grid[i] > grid[best]) best = i;
+  return [Math.floor(best / GRID), best % GRID];
+}
+
+/* ---------------- season sim ---------------- */
+function currentTeams() {
+  return (document.getElementById("ratings").value === "calibrated" && CALIBRATED_TEAMS)
+    ? CALIBRATED_TEAMS : DEFAULT_TEAMS;
+}
+function ui() {
+  return {
+    teams: currentTeams(),
+    model: document.getElementById("model").value,
+    dc: document.getElementById("dc").checked,
+    seed: (parseInt(document.getElementById("seed").value, 10) || 42) >>> 0,
+  };
+}
+function buildGrids(cfg, names, fixtures) {
+  const flat = [];
+  fixtures.forEach((md, i) => md.forEach(([h, a]) => {
+    const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+    flat.push({ md: i + 1, h, a, cum: cumulative(scoreGrid(lh, la, cfg.dc)) });
+  }));
+  return flat;
+}
+function newTable(names) {
+  const t = {};
+  names.forEach(n => t[n] = { W: 0, D: 0, L: 0, GF: 0, GA: 0, Pts: 0 });
+  return t;
+}
+function record(t, h, a, hg, ag) {
+  const rh = t[h], ra = t[a];
+  rh.GF += hg; rh.GA += ag; ra.GF += ag; ra.GA += hg;
+  if (hg > ag) { rh.W++; ra.L++; rh.Pts += 3; }
+  else if (hg < ag) { ra.W++; rh.L++; ra.Pts += 3; }
+  else { rh.D++; ra.D++; rh.Pts++; ra.Pts++; }
+}
+function standings(t, names) {
+  return [...names].sort((x, y) =>
+    t[y].Pts - t[x].Pts || (t[y].GF - t[y].GA) - (t[x].GF - t[x].GA) ||
+    t[y].GF - t[x].GF || x.localeCompare(y));
+}
+
+/* ---------------- charts (SVG) ---------------- */
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+function barChart(rows, color, title) {
+  // rows: [{name, value}] descending; single measure, single hue, value labels.
+  const bh = 16, gap = 10, left = 150, width = 480, right = 52;
+  const h = rows.length * (bh + gap) + 24;
+  const max = Math.max(...rows.map(r => r.value), 1);
+  let svg = `<p class="charttitle">${title}</p>` +
+    `<svg viewBox="0 0 ${left + width + right} ${h}" role="img" aria-label="${title}" style="width:100%;height:auto">`;
+  rows.forEach((r, i) => {
+    const y = i * (bh + gap) + 8, w = Math.max(2, r.value / max * width);
+    svg += `<text class="bar-label" x="${left - 8}" y="${y + bh - 4}" text-anchor="end">${esc(r.name)}</text>` +
+      `<rect x="${left}" y="${y}" width="${w}" height="${bh}" rx="4" fill="${color}">` +
+      `<title>${esc(r.name)}: ${r.value.toFixed(2)}%</title></rect>` +
+      `<text class="bar-val" x="${left + w + 6}" y="${y + bh - 4}">${r.value.toFixed(1)}%</text>`;
+  });
+  svg += `<text class="axis" x="${left}" y="${h - 2}">probability (%)</text></svg>`;
+  return svg;
+}
+function heatmap(order, posPct, title) {
+  // sequential single hue: white -> series-1 blue, per-cell tooltips
+  const cell = 26, left = 150, top = 8;
+  const w = left + 20 * cell + 10, h = top + order.length * cell + 34;
+  const styles = getComputedStyle(document.documentElement);
+  const surface = styles.getPropertyValue("--surface").trim();
+  let svg = `<p class="charttitle">${title}</p>` +
+    `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${title}" style="width:100%;height:auto">`;
+  const maxP = Math.max(...order.map(t => Math.max(...posPct[t])));
+  order.forEach((t, r) => {
+    const y = top + r * cell;
+    svg += `<text class="bar-label" x="${left - 8}" y="${y + cell - 8}" text-anchor="end">${esc(t)}</text>`;
+    for (let p = 0; p < 20; p++) {
+      const v = posPct[t][p], frac = Math.pow(v / maxP, 0.55);
+      svg += `<rect x="${left + p * cell}" y="${y}" width="${cell - 2}" height="${cell - 2}" rx="3" ` +
+        `fill="var(--series-1)" fill-opacity="${(0.04 + 0.96 * frac).toFixed(3)}" stroke="${surface}" stroke-width="1">` +
+        `<title>${esc(t)} — position ${p + 1}: ${v.toFixed(2)}%</title></rect>`;
+    }
+  });
+  for (let p = 0; p < 20; p += 1) {
+    svg += `<text class="axis" x="${left + p * cell + cell / 2 - 1}" y="${top + order.length * cell + 14}" text-anchor="middle">${p + 1}</text>`;
+  }
+  svg += `<text class="axis" x="${left + 10 * cell}" y="${h - 2}" text-anchor="middle">finishing position — darker = more likely (hover cells for %)</text></svg>`;
+  return svg;
+}
+
+/* ---------------- Monte Carlo ---------------- */
+let mcRunning = false;
+document.getElementById("run-mc").onclick = () => {
+  if (mcRunning) return;
+  mcRunning = true;
+  const btn = document.getElementById("run-mc"); btn.disabled = true;
+  const cfg = ui();
+  const names = Object.keys(cfg.teams);
+  const grids = buildGrids(cfg, names, generateFixtures(names));
+  const nSims = parseInt(document.getElementById("sims").value, 10);
+  const rnd = mulberry32(cfg.seed);
+  const posCounts = {}, ptsSum = {};
+  names.forEach(n => { posCounts[n] = new Array(20).fill(0); ptsSum[n] = 0; });
+  const prog = document.getElementById("mc-prog"), bar = prog.firstElementChild;
+  const status = document.getElementById("mc-status");
+  prog.style.display = "block";
+  const t0 = performance.now();
+  let done = 0;
+  const CHUNK = Math.max(200, Math.floor(nSims / 50));
+  (function step() {
+    const end = Math.min(done + CHUNK, nSims);
+    for (; done < end; done++) {
+      const table = newTable(names);
+      for (const f of grids) {
+        const [hg, ag] = sampleScore(f.cum, rnd);
+        record(table, f.h, f.a, hg, ag);
+      }
+      standings(table, names).forEach((t, pos) => posCounts[t][pos]++);
+      names.forEach(n => ptsSum[n] += table[n].Pts);
+    }
+    bar.style.width = (100 * done / nSims) + "%";
+    status.textContent = `${done.toLocaleString()} / ${nSims.toLocaleString()} seasons`;
+    if (done < nSims) { setTimeout(step, 0); return; }
+    const secs = (performance.now() - t0) / 1000;
+    status.textContent = `${nSims.toLocaleString()} seasons in ${secs.toFixed(1)}s`;
+    prog.style.display = "none";
+    renderMC(names, posCounts, ptsSum, nSims);
+    btn.disabled = false; mcRunning = false;
+  })();
+};
+function renderMC(names, posCounts, ptsSum, n) {
+  const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
+  const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
+  const order = [...names].sort((a, b) => pct(b, 1, 1) - pct(a, 1, 1) || avgPos(a) - avgPos(b));
+  let html = `<div class="scroll"><table><thead><tr>
+    <th>#</th><th class="t">Team</th><th>Title %</th><th>Top 4 %</th><th>Top 6 %</th>
+    <th>Relegation %</th><th>Avg pos</th><th>Avg pts</th></tr></thead><tbody>`;
+  order.forEach((t, i) => {
+    html += `<tr><td>${i + 1}</td><td class="t">${esc(t)}</td><td>${pct(t, 1, 1).toFixed(2)}</td>` +
+      `<td>${pct(t, 1, 4).toFixed(2)}</td><td>${pct(t, 1, 6).toFixed(2)}</td><td>${pct(t, 18, 20).toFixed(2)}</td>` +
+      `<td>${avgPos(t).toFixed(2)}</td><td>${(ptsSum[t] / n).toFixed(1)}</td></tr>`;
+  });
+  html += "</tbody></table></div>";
+  const titleRows = order.filter(t => pct(t, 1, 1) >= 0.05).map(t => ({ name: t, value: pct(t, 1, 1) }));
+  const relRows = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20))
+    .filter(t => pct(t, 18, 20) >= 0.05).map(t => ({ name: t, value: pct(t, 18, 20) }));
+  html += `<div class="grid2"><div>${barChart(titleRows, "var(--series-1)", "Title probability")}</div>` +
+    `<div>${barChart(relRows, "var(--series-2)", "Relegation probability")}</div></div>`;
+  const posPct = {};
+  names.forEach(t => posPct[t] = posCounts[t].map(c => 100 * c / n));
+  html += `<section class="block">${heatmap(order, posPct, "Finishing position distribution")}</section>`;
+  document.getElementById("mc-out").innerHTML = html;
+}
+
+/* ---------------- Matchday ---------------- */
+function renderMatchday() {
+  const cfg = ui();
+  const names = Object.keys(cfg.teams);
+  const fixtures = generateFixtures(names);
+  const md = Math.min(38, Math.max(1, parseInt(document.getElementById("mdnum").value, 10) || 1));
+  const rnd = mulberry32(cfg.seed * 1000 + md);
+  let html = `<div class="scroll"><table><thead><tr><th class="t">Home</th><th class="t">Away</th>
+    <th>Home %</th><th>Draw %</th><th>Away %</th><th>xG</th><th>Likely</th><th>Simulated</th></tr></thead><tbody>`;
+  for (const [h, a] of fixtures[md - 1]) {
+    const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+    const grid = scoreGrid(lh, la, cfg.dc);
+    const [pH, pD, pA] = outcomeProbs(grid);
+    const [mh, ma] = likelyScore(grid);
+    const [sh, sa] = sampleScore(cumulative(grid), rnd);
+    html += `<tr><td class="t">${esc(h)}</td><td class="t">${esc(a)}</td>` +
+      `<td>${(pH * 100).toFixed(1)}</td><td>${(pD * 100).toFixed(1)}</td><td>${(pA * 100).toFixed(1)}</td>` +
+      `<td>${lh.toFixed(2)}–${la.toFixed(2)}</td><td>${mh}-${ma}</td><td><strong>${sh}-${sa}</strong></td></tr>`;
+  }
+  html += "</tbody></table></div>";
+  document.getElementById("md-out").innerHTML = html;
+}
+document.getElementById("run-md").onclick = renderMatchday;
+
+/* ---------------- Full season ---------------- */
+document.getElementById("run-season").onclick = () => {
+  const cfg = ui();
+  const names = Object.keys(cfg.teams);
+  const grids = buildGrids(cfg, names, generateFixtures(names));
+  const rnd = mulberry32(cfg.seed);
+  const table = newTable(names);
+  for (const f of grids) {
+    const [hg, ag] = sampleScore(f.cum, rnd);
+    record(table, f.h, f.a, hg, ag);
+  }
+  const order = standings(table, names);
+  let html = `<div class="metrics">
+    <div class="metric"><div class="k">Champions</div><div class="v">${esc(order[0])}</div></div>
+    <div class="metric"><div class="k">Champions League</div><div class="v">${order.slice(0, 4).map(esc).join(", ")}</div></div>
+    <div class="metric"><div class="k">Relegated</div><div class="v">${order.slice(-3).map(esc).join(", ")}</div></div>
+  </div><div class="scroll"><table><thead><tr><th>#</th><th class="t">Team</th>
+    <th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>`;
+  order.forEach((t, i) => {
+    const r = table[t], cls = i < 4 ? "cl" : (i >= 17 ? "rel" : "");
+    html += `<tr class="${cls}"><td>${i + 1}</td><td class="t">${esc(t)}</td><td>${r.W}</td><td>${r.D}</td>` +
+      `<td>${r.L}</td><td>${r.GF}</td><td>${r.GA}</td><td>${r.GF - r.GA > 0 ? "+" : ""}${r.GF - r.GA}</td>` +
+      `<td><strong>${r.Pts}</strong></td></tr>`;
+  });
+  html += `</tbody></table></div>
+    <p class="note">Blue edge = Champions League places, red edge = relegation zone.</p>`;
+  document.getElementById("season-out").innerHTML = html;
+};
+
+/* ---------------- Teams ---------------- */
+function renderTeams() {
+  const teams = currentTeams();
+  const order = Object.keys(teams).sort((a, b) => teams[b].elo - teams[a].elo);
+  let html = `<div class="scroll"><table><thead><tr><th class="t">Team</th>
+    <th>Attack</th><th>Defence</th><th>Elo</th></tr></thead><tbody>`;
+  for (const t of order) {
+    const r = teams[t];
+    html += `<tr><td class="t">${esc(t)}</td><td>${r.attack.toFixed(2)}</td>` +
+      `<td>${r.defence.toFixed(2)}</td><td>${Math.round(r.elo)}</td></tr>`;
+  }
+  document.getElementById("teams-out").innerHTML = html + "</tbody></table></div>";
+}
+
+/* ---------------- tabs & init ---------------- */
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + b.dataset.tab));
+  if (b.dataset.tab === "teams") renderTeams();
+  if (b.dataset.tab === "md") renderMatchday();
+});
+document.getElementById("ratings").onchange = renderTeams;
+</script>
+<script id="calibrated-data">
+/* Written by tools/embed_calibrated.py from teams_calibrated.json */
+CALIBRATED_TEAMS = {"Arsenal": {"attack": 1.2581, "defence": 0.6495, "elo": 1888.6}, "Manchester City": {"attack": 1.344, "defence": 0.7677, "elo": 1860.1}, "Liverpool": {"attack": 1.2718, "defence": 0.9131, "elo": 1765.0}, "Manchester United": {"attack": 1.078, "defence": 0.9669, "elo": 1791.2}, "Chelsea": {"attack": 1.1125, "defence": 0.9504, "elo": 1703.1}, "Aston Villa": {"attack": 1.066, "defence": 0.9523, "elo": 1766.2}, "Newcastle United": {"attack": 1.1062, "defence": 0.9882, "elo": 1690.5}, "Tottenham Hotspur": {"attack": 1.0243, "defence": 1.0701, "elo": 1615.4}, "Crystal Palace": {"attack": 0.8593, "defence": 0.9531, "elo": 1667.5}, "Brighton": {"attack": 1.0198, "defence": 0.9602, "elo": 1713.0}, "Nottingham Forest": {"attack": 0.9349, "defence": 0.9544, "elo": 1686.2}, "Bournemouth": {"attack": 1.0367, "defence": 0.9829, "elo": 1761.5}, "Brentford": {"attack": 1.0517, "defence": 1.0076, "elo": 1709.1}, "Fulham": {"attack": 0.9226, "defence": 0.9737, "elo": 1689.8}, "Everton": {"attack": 0.8324, "defence": 0.9026, "elo": 1675.7}, "Sunderland": {"attack": 0.681, "defence": 0.9848, "elo": 1695.8}, "Leeds United": {"attack": 0.895, "defence": 0.9801, "elo": 1741.7}, "Coventry City": {"attack": 0.8238, "defence": 1.2731, "elo": 1746.4}, "Ipswich Town": {"attack": 0.7888, "defence": 1.2836, "elo": 1705.2}, "Hull City": {"attack": 0.6477, "defence": 1.4857, "elo": 1628.0}};
+</script>
+</body>
+</html>
