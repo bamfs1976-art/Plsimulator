@@ -5,6 +5,7 @@ import re
 
 with open("teams_calibrated.json", encoding="utf-8") as fh:
     ratings = json.load(fh)
+ratings.pop("_meta", None)  # fit metadata, not a team
 
 with open("index.html", encoding="utf-8") as fh:
     html = fh.read()

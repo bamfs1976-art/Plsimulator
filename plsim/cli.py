@@ -9,7 +9,7 @@ from . import models, simulate
 from .calibrate import DEFAULT_SEASONS
 from .fixtures import generate_fixtures, matchday_date
 from .table import LeagueTable
-from .teams import load_teams
+from .teams import load_ratings, load_teams
 
 
 def _build_model(args, teams):
@@ -51,7 +51,8 @@ def cmd_fixtures(args):
 
 def cmd_matchday(args):
     """Predictions + one simulated set of results for a single matchday."""
-    teams = load_teams(args.teams)
+    teams, meta = load_ratings(args.teams)
+    rho = meta.get("rho", models.DC_RHO)
     model = _build_model(args, teams)
     matchdays = generate_fixtures(teams)
     md = args.matchday
@@ -67,7 +68,7 @@ def cmd_matchday(args):
     print("-" * len(header))
     for home, away in matchdays[md - 1]:
         lam_h, lam_a = model.lambdas(home, away)
-        grid = models.score_grid(lam_h, lam_a, args.dixon_coles)
+        grid = models.score_grid(lam_h, lam_a, args.dixon_coles, rho)
         p_h, p_d, p_a = models.outcome_probs(grid)
         ml_h, ml_a = models.most_likely_score(grid)
         sim_h, sim_a = models.sample_score(models.cumulative(grid), rng)
@@ -78,12 +79,13 @@ def cmd_matchday(args):
 
 def cmd_season(args):
     """Play out one full season matchday by matchday."""
-    teams = load_teams(args.teams)
+    teams, meta = load_ratings(args.teams)
     model = _build_model(args, teams)
     matchdays = generate_fixtures(teams)
     rng = random.Random(args.seed)
     grids = simulate.fixture_grids(
-        simulate.fixture_lambdas(model, matchdays), args.dixon_coles
+        simulate.fixture_lambdas(model, matchdays), args.dixon_coles,
+        meta.get("rho")
     )
 
     table, results = simulate.simulate_season(grids, list(teams), rng)
@@ -107,7 +109,7 @@ def cmd_season(args):
 
 def cmd_montecarlo(args):
     """Monte Carlo over many seasons -> outcome probabilities."""
-    teams = load_teams(args.teams)
+    teams, meta = load_ratings(args.teams)
     model = _build_model(args, teams)
     matchdays = generate_fixtures(teams)
     team_names = list(teams)
@@ -124,7 +126,7 @@ def cmd_montecarlo(args):
     agg = simulate.monte_carlo(
         model, matchdays, team_names, args.sims,
         seed=args.seed, dixon_coles=args.dixon_coles,
-        noise=args.noise, workers=args.workers,
+        rho=meta.get("rho"), noise=args.noise, workers=args.workers,
         progress=progress if args.sims >= 20000 else None,
     )
     elapsed = time.time() - start
@@ -166,20 +168,57 @@ def cmd_calibrate(args):
         download=not args.no_download,
     )
     print(f"Fitted {info['matches']} matches "
-          f"(baselines: {info['base_home']:.2f} home / {info['base_away']:.2f} away goals)\n")
+          f"(baselines: {info['base_home']:.2f} home / {info['base_away']:.2f} away goals, "
+          f"rho: {info['rho']:+.3f}, decay half-life: {info['half_life_days']}d)\n")
 
     defaults = load_teams()
-    header = (f"{'Team':<20} {'Attack':>7} {'Defence':>8} {'Elo':>6}   "
+    header = (f"{'Team':<20} {'Attack':>7} {'Defence':>8} {'Home':>6} {'Elo':>6}   "
               f"{'(default':>9} {'att':>5} {'def':>5} {'elo)':>6}")
     print(header)
     print("-" * len(header))
     for name in sorted(ratings, key=lambda t: -ratings[t]["elo"]):
         r, d = ratings[name], defaults[name]
-        print(f"{name:<20} {r['attack']:>7.2f} {r['defence']:>8.2f} {r['elo']:>6.0f}   "
+        print(f"{name:<20} {r['attack']:>7.2f} {r['defence']:>8.2f} {r['home']:>6.2f} {r['elo']:>6.0f}   "
               f"{'':>9} {d['attack']:>5.2f} {d['defence']:>5.2f} {d['elo']:>6.0f}")
 
-    cal.write_ratings(ratings, args.out)
+    cal.write_ratings(ratings, args.out, info)
     print(f"\nWrote {args.out} - use it with:  python3 -m plsim montecarlo --teams {args.out}")
+
+
+def cmd_backtest(args):
+    """Walk-forward accuracy evaluation on a held-out season."""
+    from . import backtest as bt
+
+    target = args.target or args.seasons[-1]
+    print(f"Backtesting on {target} Premier League "
+          f"(training data: {', '.join(args.seasons)}; walk-forward, "
+          f"refit before every {'matchday' if args.every == 1 else f'{args.every}th matchday'})")
+    start = time.time()
+
+    def progress(done, total, md):
+        print(f"  matchday {md} scored ({done}/{total})", flush=True)
+
+    summaries, winner = bt.run(
+        seasons=args.seasons, target=args.target, cache_dir=args.cache_dir,
+        download=not args.no_download, every=args.every,
+        progress=progress if not args.quiet else None,
+    )
+    print(f"\nScored in {time.time() - start:.0f}s — lower is better on every metric.\n")
+    header = (f"{'Variant':<14} {'Matches':>8} {'RPS':>8} {'LogLoss':>9} "
+              f"{'Brier':>8} {'CS-Brier':>9}")
+    print(header)
+    print("-" * len(header))
+    for s in summaries:
+        print(f"{s['variant']:<14} {s['matches']:>8} {s['rps']:>8.4f} "
+              f"{s['logloss']:>9.4f} {s['brier']:>8.4f} {s['cs_brier']:>9.4f}")
+
+    print(f"\nBest model variant by RPS: {winner.name}")
+    print("\nClean-sheet calibration for the best variant")
+    print(f"{'Predicted':>12} {'Actual':>8} {'N':>6}")
+    for lo, (sum_p, hits, count) in enumerate(winner.cs_bins):
+        if not count:
+            continue
+        print(f"{sum_p / count:>11.1%} {hits / count:>7.1%} {count:>6}")
 
 
 # ---------------------------------------------------------------- parser
@@ -254,6 +293,21 @@ def build_parser():
     p.add_argument("--no-download", action="store_true",
                    help="use cached files only, never hit the network")
     p.set_defaults(func=cmd_calibrate)
+
+    p = sub.add_parser("backtest",
+                       help="score model variants on a held-out season")
+    p.add_argument("--seasons", nargs="+", metavar="YYYY-YY",
+                   default=list(DEFAULT_SEASONS),
+                   help="seasons to load, oldest first")
+    p.add_argument("--target", metavar="YYYY-YY", default=None,
+                   help="season to hold out and predict (default: most recent)")
+    p.add_argument("--every", type=int, default=1, metavar="N",
+                   help="evaluate every N-th matchday only (quick mode)")
+    p.add_argument("--cache-dir", default="data", metavar="DIR")
+    p.add_argument("--no-download", action="store_true")
+    p.add_argument("--quiet", action="store_true",
+                   help="suppress per-matchday progress")
+    p.set_defaults(func=cmd_backtest)
 
     return parser
 

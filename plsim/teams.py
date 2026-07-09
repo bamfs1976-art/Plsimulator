@@ -44,16 +44,28 @@ BASE_HOME_GOALS = 1.62
 BASE_AWAY_GOALS = 1.32
 
 
-def load_teams(path=None):
-    """Return the team ratings dict, optionally overridden from a JSON file."""
+def load_ratings(path=None):
+    """Return (teams dict, meta dict) from a ratings JSON file.
+
+    ``meta`` comes from the file's optional ``_meta`` block (fitted
+    Dixon-Coles rho, fit settings); it is empty for the built-in
+    defaults. Each team may carry an optional ``home`` multiplier
+    (per-club home advantage, 1.0 = league average).
+    """
     if path is None:
-        return {name: dict(r) for name, r in DEFAULT_TEAMS.items()}
+        return {name: dict(r) for name, r in DEFAULT_TEAMS.items()}, {}
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
+    meta = data.pop("_meta", {})
     if len(data) != 20:
         raise ValueError(f"expected 20 teams, got {len(data)} in {path}")
     for name, r in data.items():
         for key in ("attack", "defence", "elo"):
             if key not in r:
                 raise ValueError(f"team {name!r} in {path} is missing {key!r}")
-    return data
+    return data, meta
+
+
+def load_teams(path=None):
+    """Return the team ratings dict, optionally overridden from a JSON file."""
+    return load_ratings(path)[0]

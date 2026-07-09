@@ -52,6 +52,10 @@ python3 -m plsim montecarlo --sims 20000 --positions   # full 20x20 position mat
 python3 -m plsim calibrate
 python3 -m plsim montecarlo --sims 50000 --teams teams_calibrated.json
 
+# Score the model honestly: walk-forward backtest on a held-out season
+python3 -m plsim backtest
+python3 -m plsim backtest --every 4        # quick mode
+
 # Interactive web dashboard (needs: pip install streamlit)
 streamlit run dashboard.py
 ```
@@ -110,6 +114,34 @@ League tables use the Premier League tie-breakers (points, goal
 difference, goals scored); head-to-head is approximated alphabetically,
 which is statistically neutral across large runs.
 
+## Backtesting: how accurate is it, really?
+
+`python3 -m plsim backtest` answers the question honestly. For every
+matchday of a held-out season (2025/26 by default) it refits each model
+variant on strictly earlier matches only — cut off by real match date —
+then predicts that matchday's fixtures and scores the predictions with
+the ranked probability score (RPS), log-loss, Brier, and a clean-sheet
+Brier. Walk-forward, exactly like live use; no peeking.
+
+Measured on the 380 matches of 2025/26 (lower is better):
+
+| Variant | RPS | Log-loss | CS Brier |
+|---|---|---|---|
+| uniform (1/3 each) | 0.2322 | 1.0986 | — |
+| league H/D/A rates | 0.2276 | 1.0813 | — |
+| Elo model | 0.2194 | 1.0633 | 0.1834 |
+| Poisson, season-step weights | 0.2133 | 1.0410 | 0.1811 |
+| **+ decay + fitted rho + home adv** | **0.2126** | **1.0377** | **0.1808** |
+
+For scale: bookmaker closing odds typically score ~0.19–0.20 RPS on the
+Premier League, so a goals-only model at 0.2126 is solid. The backtest
+drove three calibration choices now baked in as defaults: exponential
+**date decay** with a 250-day half-life (beats longer half-lives, ties
+season steps on the holdout, and keeps working mid-season), a
+**maximum-likelihood Dixon-Coles rho** (the data says ~-0.07, milder
+than the textbook -0.12), and **per-club home advantage** (mean 1.0,
+shrunk toward neutral; e.g. Newcastle fit ~1.19 at home vs Forest ~0.79).
+
 ## Calibrating ratings from real results
 
 `python3 -m plsim calibrate` fits all three rating columns from actual
@@ -122,12 +154,18 @@ match data instead of the hand-set defaults:
   so `--no-download` re-fits fully offline.
 - **Attack/defence** come from a weighted iterative Poisson
   maximum-likelihood fit (`goals ~ base × attack(scorer) ×
-  defence(conceder)`, separate home/away baselines). Both divisions are
-  fitted **jointly**, so the promoted clubs' Championship goals are
-  anchored to Premier League level through the clubs that moved between
-  divisions. Recent seasons weigh more (weight halves per season back),
-  and each club's rating is shrunk toward league-average in proportion
-  to its weighted match count.
+  defence(conceder) × home(scorer if at home)`, separate home/away
+  baselines). Both divisions are fitted **jointly**, so the promoted
+  clubs' Championship goals are anchored to Premier League level through
+  the clubs that moved between divisions. Matches decay exponentially by
+  date (250-day half-life, backtest-validated), and each club's rating
+  is shrunk toward league-average in proportion to its weighted match
+  count.
+- **Home** is each club's fitted home-advantage multiplier, shrunk
+  toward 1.0 by 12 pseudo-matches.
+- **Rho**, the Dixon-Coles correlation, is fitted by maximum likelihood
+  and stored in the file's `_meta` block; every command reads it
+  automatically when you pass `--teams`.
 - **Elo** comes from a chronological Elo pass (K=24, +60 home) over the
   same matches. Note: a dominant Championship season inflates a promoted
   club's Elo more than its Poisson ratings, because Elo only sees
@@ -182,9 +220,10 @@ plsim/
   models.py     # Poisson & Elo models, Dixon-Coles, score grids
   table.py      # league table + PL tie-breakers
   simulate.py   # season simulation + multiprocess Monte Carlo engine
-  calibrate.py  # rating fit from historical results (openfootball)
+  calibrate.py  # rating fit: decay-weighted Poisson MLE, home adv, rho
+  backtest.py   # walk-forward accuracy evaluation (RPS/log-loss/Brier)
   cli.py        # argparse CLI (teams/fixtures/matchday/season/
-                #               montecarlo/calibrate)
+                #               montecarlo/calibrate/backtest)
 dashboard.py    # Streamlit web dashboard (optional)
 data/           # cached openfootball results used by `calibrate`
 teams_calibrated.json  # pre-fitted ratings from 2023-26 results

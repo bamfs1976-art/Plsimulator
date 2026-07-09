@@ -31,10 +31,11 @@ def fixture_lambdas(model, matchdays):
     ]
 
 
-def fixture_grids(lambdas, dixon_coles=False):
+def fixture_grids(lambdas, dixon_coles=False, rho=None):
     """Cumulative score distributions for every fixture in the season."""
     return [
-        (md, home, away, models.cumulative(models.score_grid(lh, la, dixon_coles)))
+        (md, home, away, models.cumulative(models.score_grid(
+            lh, la, dixon_coles, models.DC_RHO if rho is None else rho)))
         for md, home, away, lh, la in lambdas
     ]
 
@@ -131,14 +132,14 @@ class Aggregate:
 
 
 def _worker(args):
-    (n_sims, seed, team_names, lambdas, dixon_coles, noise) = args
+    (n_sims, seed, team_names, lambdas, dixon_coles, rho, noise) = args
     rng = random.Random(seed)
     agg = Aggregate(team_names)
     if noise > 0:
         for _ in range(n_sims):
             agg.add_season(_simulate_season_noisy(lambdas, team_names, rng, noise))
     else:
-        grids = fixture_grids(lambdas, dixon_coles)
+        grids = fixture_grids(lambdas, dixon_coles, rho)
         for _ in range(n_sims):
             table, _results = simulate_season(grids, team_names, rng)
             agg.add_season(table)
@@ -146,7 +147,7 @@ def _worker(args):
 
 
 def monte_carlo(model, matchdays, team_names, n_sims, seed=None,
-                dixon_coles=False, noise=0.0, workers=None, progress=None):
+                dixon_coles=False, rho=None, noise=0.0, workers=None, progress=None):
     """Run n_sims full seasons and return the merged Aggregate."""
     lambdas = fixture_lambdas(model, matchdays)
     if seed is None:
@@ -155,11 +156,11 @@ def monte_carlo(model, matchdays, team_names, n_sims, seed=None,
         workers = min(multiprocessing.cpu_count(), 8) if n_sims >= 4000 else 1
 
     if workers <= 1:
-        return _worker((n_sims, seed, team_names, lambdas, dixon_coles, noise))
+        return _worker((n_sims, seed, team_names, lambdas, dixon_coles, rho, noise))
 
     base, extra = divmod(n_sims, workers)
     jobs = [
-        (base + (1 if w < extra else 0), seed + w, team_names, lambdas, dixon_coles, noise)
+        (base + (1 if w < extra else 0), seed + w, team_names, lambdas, dixon_coles, rho, noise)
         for w in range(workers)
         if base + (1 if w < extra else 0) > 0
     ]

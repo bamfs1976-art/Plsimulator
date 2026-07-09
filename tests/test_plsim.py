@@ -137,26 +137,30 @@ Sat Aug 12
 """
 
     def test_v_format(self):
+        import datetime
         from plsim.calibrate import parse_matches
-        got = list(parse_matches(self.V_FORMAT))
+        got = list(parse_matches(self.V_FORMAT, season="2025-26"))
         self.assertEqual(got, [
-            (1, "Liverpool FC", "AFC Bournemouth", 4, 2),
-            (1, "Aston Villa FC", "Newcastle United FC", 0, 0),
-            (1, "Brighton & Hove Albion FC", "Fulham FC", 1, 1),
+            (1, datetime.date(2025, 8, 15), "Liverpool FC", "AFC Bournemouth", 4, 2),
+            (1, datetime.date(2025, 8, 16), "Aston Villa FC", "Newcastle United FC", 0, 0),
+            (1, datetime.date(2025, 8, 16), "Brighton & Hove Albion FC", "Fulham FC", 1, 1),
         ])
 
     def test_mid_score_format(self):
+        import datetime
         from plsim.calibrate import parse_matches
-        got = list(parse_matches(self.MID_FORMAT))
+        got = list(parse_matches(self.MID_FORMAT, season="2023-24"))
         self.assertEqual(got, [
-            (1, "Burnley FC", "Manchester City FC", 0, 3),
-            (1, "Brighton & Hove Albion FC", "Luton Town FC", 4, 1),
+            (1, datetime.date(2023, 8, 11), "Burnley FC", "Manchester City FC", 0, 3),
+            (1, datetime.date(2023, 8, 12), "Brighton & Hove Albion FC", "Luton Town FC", 4, 1),
         ])
 
     def test_playoffs_excluded(self):
+        import datetime
         from plsim.calibrate import parse_matches
-        got = list(parse_matches(self.PLAYOFFS))
-        self.assertEqual(got, [(46, "Hull City AFC", "Norwich City FC", 2, 1)])
+        got = list(parse_matches(self.PLAYOFFS, season="2025-26"))
+        self.assertEqual(got, [
+            (46, datetime.date(2026, 5, 2), "Hull City AFC", "Norwich City FC", 2, 1)])
 
     def test_calibrate_from_cached_data(self):
         import os
@@ -178,6 +182,44 @@ Sat Aug 12
                         ratings["Hull City"]["defence"])
         self.assertGreater(ratings["Arsenal"]["elo"],
                            ratings["Hull City"]["elo"])
+
+
+class BacktestTests(unittest.TestCase):
+    def test_rps_known_values(self):
+        from plsim.backtest import rps
+        # Certain and correct -> 0; certain and maximally wrong -> 1.
+        self.assertAlmostEqual(rps((1, 0, 0), 0), 0.0)
+        self.assertAlmostEqual(rps((0, 0, 1), 0), 1.0)
+        # Uniform forecast, home win: 0.5*((1/3-1)^2+(2/3-1)^2) = 5/18.
+        self.assertAlmostEqual(rps((1 / 3, 1 / 3, 1 / 3), 0), 5 / 18)
+        # Draw is "between" H and A, so a draw forecast error is smaller.
+        self.assertLess(rps((0, 1, 0), 0), rps((0, 0, 1), 0))
+
+    def test_walk_forward_smoke(self):
+        import os
+        if not os.path.isdir("data"):
+            self.skipTest("no cached data/ directory")
+        from plsim import backtest as bt
+        summaries, winner = bt.run(download=False, every=8)
+        by_name = {s["variant"]: s for s in summaries}
+        self.assertEqual(len(by_name), 8)
+        # Every fitted variant must beat the uniform reference.
+        for v in bt.VARIANTS:
+            self.assertLess(by_name[v]["rps"], by_name["uniform"]["rps"])
+        self.assertIn(winner.name, bt.VARIANTS)
+
+    def test_calibrated_file_has_home_and_meta(self):
+        import os
+        if not os.path.exists("teams_calibrated.json"):
+            self.skipTest("no teams_calibrated.json")
+        from plsim.teams import load_ratings
+        teams, meta = load_ratings("teams_calibrated.json")
+        self.assertEqual(len(teams), 20)
+        self.assertIn("rho", meta)
+        for r in teams.values():
+            self.assertIn("home", r)
+        mean_home = sum(r["home"] for r in teams.values()) / 20
+        self.assertAlmostEqual(mean_home, 1.0, places=2)
 
 
 if __name__ == "__main__":

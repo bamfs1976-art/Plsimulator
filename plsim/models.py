@@ -34,7 +34,11 @@ _FACT = [math.factorial(k) for k in range(GRID)]
 
 
 class PoissonModel:
-    """Attack/defence Poisson model."""
+    """Attack/defence Poisson model with optional per-club home advantage.
+
+    A team's ``home`` rating (default 1.0) multiplies its scoring rate at
+    home only — calibrated ratings carry it fitted from real results.
+    """
 
     name = "poisson"
 
@@ -43,7 +47,7 @@ class PoissonModel:
 
     def lambdas(self, home, away):
         th, ta = self.teams[home], self.teams[away]
-        lam_h = BASE_HOME_GOALS * th["attack"] * ta["defence"]
+        lam_h = BASE_HOME_GOALS * th["attack"] * ta["defence"] * th.get("home", 1.0)
         lam_a = BASE_AWAY_GOALS * ta["attack"] * th["defence"]
         return lam_h, lam_a
 

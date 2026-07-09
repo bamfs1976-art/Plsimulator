@@ -155,7 +155,8 @@ const DEFAULT_TEAMS = {
 };
 let CALIBRATED_TEAMS = null; // injected below the script if available
 const BASE_H = 1.62, BASE_A = 1.32, MAXG = 10, GRID = MAXG + 1;
-const ELO_HOME = 60, ELO_SCALE = 0.45, DC_RHO = -0.12, LN10 = Math.log(10);
+/* DC_RHO fitted by maximum likelihood on 2023-26 results (plsim calibrate) */
+const ELO_HOME = 60, ELO_SCALE = 0.45, DC_RHO = -0.074, LN10 = Math.log(10);
 
 /* ---------------- prng ---------------- */
 function mulberry32(seed) {
@@ -194,7 +195,8 @@ function generateFixtures(names) {
 function lambdas(model, teams, home, away) {
   const th = teams[home], ta = teams[away];
   if (model === "poisson")
-    return [BASE_H * th.attack * ta.defence, BASE_A * ta.attack * th.defence];
+    return [BASE_H * th.attack * ta.defence * (th.home || 1),
+            BASE_A * ta.attack * th.defence];
   const diff = th.elo - ta.elo + ELO_HOME;
   const exp = 1 / (1 + Math.pow(10, -diff / 400));
   const skew = ELO_SCALE * (2 * exp - 1) * LN10, half = (BASE_H + BASE_A) / 2;
@@ -470,7 +472,7 @@ document.getElementById("ratings").onchange = renderTeams;
 </script>
 <script id="calibrated-data">
 /* Written by tools/embed_calibrated.py from teams_calibrated.json */
-CALIBRATED_TEAMS = {"Arsenal": {"attack": 1.2581, "defence": 0.6495, "elo": 1888.6}, "Manchester City": {"attack": 1.344, "defence": 0.7677, "elo": 1860.1}, "Liverpool": {"attack": 1.2718, "defence": 0.9131, "elo": 1765.0}, "Manchester United": {"attack": 1.078, "defence": 0.9669, "elo": 1791.2}, "Chelsea": {"attack": 1.1125, "defence": 0.9504, "elo": 1703.1}, "Aston Villa": {"attack": 1.066, "defence": 0.9523, "elo": 1766.2}, "Newcastle United": {"attack": 1.1062, "defence": 0.9882, "elo": 1690.5}, "Tottenham Hotspur": {"attack": 1.0243, "defence": 1.0701, "elo": 1615.4}, "Crystal Palace": {"attack": 0.8593, "defence": 0.9531, "elo": 1667.5}, "Brighton": {"attack": 1.0198, "defence": 0.9602, "elo": 1713.0}, "Nottingham Forest": {"attack": 0.9349, "defence": 0.9544, "elo": 1686.2}, "Bournemouth": {"attack": 1.0367, "defence": 0.9829, "elo": 1761.5}, "Brentford": {"attack": 1.0517, "defence": 1.0076, "elo": 1709.1}, "Fulham": {"attack": 0.9226, "defence": 0.9737, "elo": 1689.8}, "Everton": {"attack": 0.8324, "defence": 0.9026, "elo": 1675.7}, "Sunderland": {"attack": 0.681, "defence": 0.9848, "elo": 1695.8}, "Leeds United": {"attack": 0.895, "defence": 0.9801, "elo": 1741.7}, "Coventry City": {"attack": 0.8238, "defence": 1.2731, "elo": 1746.4}, "Ipswich Town": {"attack": 0.7888, "defence": 1.2836, "elo": 1705.2}, "Hull City": {"attack": 0.6477, "defence": 1.4857, "elo": 1628.0}};
+CALIBRATED_TEAMS = {"Arsenal": {"attack": 1.2243, "defence": 0.7014, "home": 0.9921, "elo": 1889.5}, "Manchester City": {"attack": 1.2619, "defence": 0.7926, "home": 1.081, "elo": 1860.2}, "Liverpool": {"attack": 1.2466, "defence": 0.9604, "home": 0.9629, "elo": 1765.4}, "Manchester United": {"attack": 1.1038, "defence": 0.9612, "home": 1.0249, "elo": 1791.7}, "Chelsea": {"attack": 1.102, "defence": 0.9753, "home": 0.9195, "elo": 1703.3}, "Aston Villa": {"attack": 1.0339, "defence": 0.9663, "home": 1.0759, "elo": 1766.5}, "Newcastle United": {"attack": 1.0034, "defence": 1.006, "home": 1.1915, "elo": 1690.8}, "Tottenham Hotspur": {"attack": 0.995, "defence": 1.0825, "home": 0.9297, "elo": 1615.5}, "Crystal Palace": {"attack": 0.8996, "defence": 0.9838, "home": 0.93, "elo": 1668.2}, "Brighton": {"attack": 1.0117, "defence": 0.9509, "home": 0.9873, "elo": 1713.2}, "Nottingham Forest": {"attack": 1.0742, "defence": 0.9475, "home": 0.7911, "elo": 1686.5}, "Bournemouth": {"attack": 1.0918, "defence": 0.9609, "home": 0.8931, "elo": 1762.2}, "Brentford": {"attack": 1.008, "defence": 0.9895, "home": 1.0746, "elo": 1709.5}, "Fulham": {"attack": 0.8843, "defence": 0.9643, "home": 1.076, "elo": 1690.2}, "Everton": {"attack": 0.8646, "defence": 0.9326, "home": 1.0411, "elo": 1676.4}, "Sunderland": {"attack": 0.7242, "defence": 0.9873, "home": 0.9962, "elo": 1696.2}, "Leeds United": {"attack": 0.8803, "defence": 0.9711, "home": 1.1191, "elo": 1742.0}, "Coventry City": {"attack": 0.8502, "defence": 1.1994, "home": 1.0023, "elo": 1746.6}, "Ipswich Town": {"attack": 0.816, "defence": 1.2441, "home": 0.966, "elo": 1700.0}, "Hull City": {"attack": 0.6925, "defence": 1.4229, "home": 0.9456, "elo": 1626.1}};
 </script>
 </body>
 </html>
