@@ -7,7 +7,7 @@ import time
 
 from . import models, simulate
 from .calibrate import DEFAULT_SEASONS
-from .fixtures import generate_fixtures, matchday_date
+from .fixtures import get_fixtures, matchday_date
 from .table import LeagueTable
 from .teams import load_ratings, load_teams
 
@@ -16,8 +16,12 @@ def _build_model(args, teams):
     return models.make_model(args.model, teams)
 
 
-def _print_matchday_results(md, results, table=None):
-    print(f"\nMatchday {md}  ({matchday_date(md):%a %d %b %Y})")
+def _md_date(md, md_dates):
+    return md_dates.get(md) or matchday_date(md)
+
+
+def _print_matchday_results(md, results, md_dates, table=None):
+    print(f"\nMatchday {md}  ({_md_date(md, md_dates):%a %d %b %Y})")
     print("-" * 44)
     for _md, home, away, hg, ag in results:
         print(f"  {home:<20} {hg} - {ag} {away}")
@@ -40,10 +44,11 @@ def cmd_teams(args):
 
 def cmd_fixtures(args):
     teams = load_teams(args.teams)
-    matchdays = generate_fixtures(teams)
+    matchdays, md_dates, src_label = get_fixtures(teams)
+    print(f"[{src_label} 2026/27 fixture list]")
     selected = [args.matchday] if args.matchday else range(1, len(matchdays) + 1)
     for md in selected:
-        print(f"\nMatchday {md}  ({matchday_date(md):%a %d %b %Y})")
+        print(f"\nMatchday {md}  ({_md_date(md, md_dates):%a %d %b %Y})")
         print("-" * 44)
         for home, away in matchdays[md - 1]:
             print(f"  {home:<20} v  {away}")
@@ -54,13 +59,13 @@ def cmd_matchday(args):
     teams, meta = load_ratings(args.teams)
     rho = meta.get("rho", models.DC_RHO)
     model = _build_model(args, teams)
-    matchdays = generate_fixtures(teams)
+    matchdays, md_dates, _src = get_fixtures(teams)
     md = args.matchday
     if not 1 <= md <= len(matchdays):
         sys.exit(f"matchday must be 1-{len(matchdays)}")
     rng = random.Random(args.seed)
 
-    print(f"Matchday {md}  ({matchday_date(md):%a %d %b %Y})  —  model: {model.name}"
+    print(f"Matchday {md}  ({_md_date(md, md_dates):%a %d %b %Y})  —  model: {model.name}"
           + ("+dixon-coles" if args.dixon_coles else ""))
     header = (f"{'Fixture':<42} {'Home%':>6} {'Draw%':>6} {'Away%':>6}  "
               f"{'xG':>9}  {'Likely':>6}  {'Simulated':>9}")
@@ -81,7 +86,7 @@ def cmd_season(args):
     """Play out one full season matchday by matchday."""
     teams, meta = load_ratings(args.teams)
     model = _build_model(args, teams)
-    matchdays = generate_fixtures(teams)
+    matchdays, md_dates, _src = get_fixtures(teams)
     rng = random.Random(args.seed)
     grids = simulate.fixture_grids(
         simulate.fixture_lambdas(model, matchdays), args.dixon_coles,
@@ -97,7 +102,7 @@ def cmd_season(args):
             for _md, home, away, hg, ag in md_results:
                 running.record(home, away, hg, ag)
             show_table = args.tables and (md % args.tables == 0 or md == len(matchdays))
-            _print_matchday_results(md, md_results, running if show_table else None)
+            _print_matchday_results(md, md_results, md_dates, running if show_table else None)
         print()
 
     print(table.render(title=f"Final 2026/27 table  (model: {model.name}, seed: {args.seed})"))
@@ -111,7 +116,7 @@ def cmd_montecarlo(args):
     """Monte Carlo over many seasons -> outcome probabilities."""
     teams, meta = load_ratings(args.teams)
     model = _build_model(args, teams)
-    matchdays = generate_fixtures(teams)
+    matchdays, _md_dates, _src = get_fixtures(teams)
     team_names = list(teams)
 
     label = model.name + ("+dixon-coles" if args.dixon_coles and not args.noise else "")

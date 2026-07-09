@@ -1,0 +1,39 @@
+# Weekly self-update: refresh results, refit ratings, re-embed the web
+# app, and push. Netlify then auto-deploys the updated simulator.
+name: Weekly recalibration
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC, after the weekend fixtures
+  workflow_dispatch: {}    # manual runs from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  recalibrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh data and refit ratings
+        run: python3 tools/weekly_update.py
+
+      - name: Run the test suite
+        run: python3 -m unittest discover tests
+
+      - name: Commit and push if anything changed
+        run: |
+          git config user.name "plsim-recalibrate[bot]"
+          git config user.email "actions@github.com"
+          git add data teams_calibrated.json index.html
+          if git diff --cached --quiet; then
+            echo "no changes this week"
+          else
+            git commit -m "Weekly recalibration: refresh results and refit ratings"
+            git push
+          fi

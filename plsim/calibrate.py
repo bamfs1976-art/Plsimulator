@@ -165,6 +165,42 @@ def parse_matches(text, season=None):
         yield matchday, date, home.strip(), away.strip(), int(hg), int(ag)
 
 
+def parse_fixtures(text, season=None):
+    """Yield (matchday, date, home, away) for scheduled (scoreless) fixtures."""
+    fixture_re = re.compile(
+        r"^\s*(?:\d{1,2}[.:]\d{2}\s+)?(.+?)\s+v\s+(\S.*?)\s*$")
+    matchday = 0
+    date = None
+    in_league_stage = True
+    for line in text.splitlines():
+        if _STAGE_RE.match(line):
+            md = _MATCHDAY_RE.search(line)
+            if md:
+                matchday = int(md.group(1))
+                in_league_stage = True
+            else:
+                in_league_stage = line.lstrip().startswith("=")
+            continue
+        if not in_league_stage or line.lstrip().startswith("#"):
+            continue
+        d = _DATE_RE.match(line)
+        if d:
+            mon, day, year = _MONTHS.get(d.group(1)), int(d.group(2)), d.group(3)
+            if mon:
+                y = int(year) if year else (_season_year(season, mon) if season else None)
+                if y:
+                    try:
+                        date = datetime.date(y, mon, day)
+                    except ValueError:
+                        pass
+            continue
+        if _MATCH_V_RE.match(line) or _MATCH_MID_RE.match(line):
+            continue  # played match, not a scheduled fixture
+        m = fixture_re.match(line)
+        if m:
+            yield matchday, date, m.group(1).strip(), m.group(2).strip()
+
+
 def load_matches(seasons=DEFAULT_SEASONS, cache_dir="data", download=True):
     """All matches as dicts, chronologically sortable.
 
