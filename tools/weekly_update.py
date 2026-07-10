@@ -74,6 +74,7 @@ def main():
     cal.write_ratings(ratings, "teams_calibrated.json", info)
     print(f"fitted {info['matches']} matches, rho {info['rho']:+.3f}")
 
+    subprocess.run([sys.executable, "tools/snapshot_history.py"], check=True)
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
     print("done")
 

@@ -290,6 +290,7 @@ const DEFAULT_TEAMS = {
 };
 let CALIBRATED_TEAMS = null; // injected below the script if available
 let REAL_FIXTURES = null;     // official fixture list, injected when known
+let ODDS_HISTORY = null;      // weekly odds snapshots, injected when known
 const BASE_H = 1.62, BASE_A = 1.32, MAXG = 10, GRID = MAXG + 1;
 /* DC_RHO fitted by maximum likelihood on 2023-26 results (plsim calibrate) */
 const ELO_HOME = 60, ELO_SCALE = 0.45, DC_RHO = -0.074, LN10 = Math.log(10);
@@ -307,6 +308,50 @@ const CLUB_COLOR = {
 function clubDot(t) {
   const c = CLUB_COLOR[t];
   return c ? `<span class="dot" style="background:${c}"></span>` : "";
+}
+
+function getFav() { try { return localStorage.getItem("plsim-fav") || ""; } catch (_) { return ""; } }
+function setFav(t) {
+  try { t ? localStorage.setItem("plsim-fav", t) : localStorage.removeItem("plsim-fav"); } catch (_) {}
+}
+/* Club odds trajectory across the weekly snapshots. */
+function clubHistory(team) {
+  if (!ODDS_HISTORY || ODDS_HISTORY.length < 2) return null;
+  return ODDS_HISTORY.map(s => s.clubs[team]).filter(Boolean);
+}
+function sparkline(values, color, label, higherIsBetter) {
+  if (!values || values.length < 2) return "";
+  if (higherIsBetter === undefined) higherIsBetter = true;
+  const w = 220, h = 44, max = Math.max(...values, 1), min = Math.min(...values, 0);
+  const pts = values.map((v, i) =>
+    `${(i / (values.length - 1)) * w},${h - 4 - (h - 10) * (v - min) / Math.max(max - min, 0.5)}`).join(" ");
+  const last = values[values.length - 1], first = values[0];
+  const d = last - first;
+  const good = higherIsBetter ? d > 0 : d < 0;
+  return `<div style="margin:10px 0 4px"><span class="note">${label}: ${last.toFixed(1)}%` +
+    (Math.abs(d) >= 0.5 ? ` <b style="color:${good ? 'var(--series-2)' : 'var(--danger)'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}</b> over ${values.length} weeks` : "") +
+    `</span><br><svg viewBox="0 0 ${w} ${h}" style="width:220px;height:${h}px">` +
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/></svg></div>`;
+}
+/* Title race over the season: one line per contender, club colours. */
+function raceChart() {
+  if (!ODDS_HISTORY || ODDS_HISTORY.length < 3) return "";
+  const latest = ODDS_HISTORY[ODDS_HISTORY.length - 1].clubs;
+  const clubs = Object.keys(latest).sort((a, b) => latest[b].title - latest[a].title).slice(0, 5);
+  const n = ODDS_HISTORY.length, W = 560, H = 200, R = 110;
+  const maxY = Math.max(5, ...clubs.flatMap(c => ODDS_HISTORY.map(s => (s.clubs[c] || {}).title || 0)));
+  let svg = "";
+  clubs.forEach(c => {
+    const col = CLUB_COLOR[c] || "var(--series-1)";
+    const pts = ODDS_HISTORY.map((s, i) =>
+      `${(i / (n - 1)) * W},${H - 8 - (H - 24) * ((s.clubs[c] || {}).title || 0) / maxY}`).join(" ");
+    const yEnd = H - 8 - (H - 24) * (latest[c].title / maxY);
+    svg += `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round"><title>${esc(c)}</title></polyline>` +
+      `<text x="${W + 8}" y="${yEnd + 4}" class="bar-label">${esc(c)} ${latest[c].title.toFixed(0)}%</text>`;
+  });
+  return `<section class="block"><p class="charttitle">The title race — odds by week</p>` +
+    `<div class="scroll"><svg viewBox="0 0 ${W + R} ${H + 10}" style="min-width:480px;width:100%;height:auto" role="img" aria-label="title odds over the season">${svg}</svg></div>` +
+    `<p class="note">One point per weekly recalibration. The story of the season, as the model saw it.</p></section>`;
 }
 
 /* ---------------- prng ---------------- */
@@ -549,8 +594,7 @@ function renderMC(names, posCounts, ptsSum, n) {
       <div class="v">${esc(favT)}</div><div class="s">${pct(favT, 1, 1).toFixed(0)}% champion · ${esc(chaser)} ${pct(chaser, 1, 1).toFixed(0)}%</div></div>
     <div class="stat"><div class="k">Most likely to go down</div>
       <div class="v">${esc(relOrder[0])}</div><div class="s">${pct(relOrder[0], 18, 20).toFixed(0)}% relegated · ${esc(relOrder[1])} ${pct(relOrder[1], 18, 20).toFixed(0)}%</div></div>
-    <div class="stat"><div class="k">Simulated</div>
-      <div class="v">${n.toLocaleString()}</div><div class="s">full 380-match seasons</div></div>
+    ${favCard(pct, n)}
   </div>`;
   renderMovers(order, pct);
 
@@ -574,6 +618,7 @@ function renderMC(names, posCounts, ptsSum, n) {
     `<div>${barChart(relRows, "var(--series-2)", "Relegation probability")}</div></div>`;
   const posPct = {};
   names.forEach(t => posPct[t] = posCounts[t].map(c => 100 * c / n));
+  html += raceChart();
   html += `<section class="block">${heatmap(order, posPct, "Finishing position distribution")}</section>`;
   document.getElementById("mc-out").innerHTML = html;
   document.querySelectorAll("#mc-out tr.clickable").forEach(tr =>
@@ -600,6 +645,16 @@ function saveSnapshot(order, pct) {
     order.forEach(t => { snap.title[t] = pct(t, 1, 1); snap.rel[t] = pct(t, 18, 20); });
     localStorage.setItem("plsim-snap", JSON.stringify(snap));
   } catch (_) {}
+}
+function favCard(pct, n) {
+  const fav = getFav();
+  if (fav && CALIBRATED_TEAMS && (CALIBRATED_TEAMS[fav] || DEFAULT_TEAMS[fav])) {
+    return `<div class="stat" style="cursor:pointer" onclick="openTeam('${esc(fav)}')">
+      <div class="k">★ Your club</div><div class="v">${clubDot(fav)}${esc(fav)}</div>
+      <div class="s">title ${pct(fav, 1, 1).toFixed(1)}% · top 4 ${pct(fav, 1, 4).toFixed(0)}% · drop ${pct(fav, 18, 20).toFixed(0)}%</div></div>`;
+  }
+  return `<div class="stat"><div class="k">Simulated</div>
+      <div class="v">${n.toLocaleString()}</div><div class="s">full seasons · ★ a club from its page</div></div>`;
 }
 function renderMovers(order, pct) {
   const box = document.getElementById("mc-movers");
@@ -661,6 +716,16 @@ function openTeam(team) {
     }
   }
   const r = teams[team];
+  const isFav = getFav() === team;
+  const col = CLUB_COLOR[team] || "var(--series-1)";
+  const oddsHist = clubHistory(team);
+  let spark = "";
+  if (oddsHist) {
+    const rels = oddsHist.map(h => h.rel), titles = oddsHist.map(h => h.title);
+    spark = (titles[titles.length - 1] >= 3 || rels[rels.length - 1] < 5)
+      ? sparkline(titles, col, "Title odds", true)
+      : sparkline(rels, "var(--danger)", "Relegation odds", false);
+  }
   let dlg = document.getElementById("team-dlg");
   if (!dlg) {
     dlg = document.createElement("dialog");
@@ -668,8 +733,12 @@ function openTeam(team) {
     document.body.appendChild(dlg);
     dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
   }
+  dlg.style.borderTop = `4px solid ${col}`;
   dlg.innerHTML = `<button class="modal-x" onclick="this.closest('dialog').close()">×</button>
-    <h2 style="margin:0 0 2px;font-size:20px">${esc(team)}</h2>
+    <button class="modal-x" style="margin-right:6px;font-size:17px;color:${isFav ? 'var(--series-2)' : 'var(--text-3)'}"
+      title="${isFav ? 'Unfavourite' : 'Make this my club'}"
+      onclick="setFav(${isFav ? "''" : `'${esc(team)}'`});this.closest('dialog').close();document.getElementById('run-mc').click()">${isFav ? '★' : '☆'}</button>
+    <h2 style="margin:0 0 2px;font-size:20px">${clubDot(team)}${esc(team)}</h2>
     <p class="note" style="margin:0 0 14px">attack ${r.attack.toFixed(2)} · defence ${r.defence.toFixed(2)}${r.home ? " · home advantage " + r.home.toFixed(2) : ""}</p>
     <div class="hero" style="margin-bottom:16px">
       <div class="stat"><div class="k">Title</div><div class="v">${pctAt(0).toFixed(1)}%</div></div>
@@ -677,6 +746,7 @@ function openTeam(team) {
       <div class="stat"><div class="k">Relegated</div><div class="v">${(pctAt(17) + pctAt(18) + pctAt(19)).toFixed(1)}%</div></div>
       <div class="stat"><div class="k">Points</div><div class="v">${q(0.5)}</div><div class="s">80% range ${q(0.1)}–${q(0.9)}</div></div>
     </div>
+    ${spark}
     <p class="charttitle">Finishing position odds</p>
     <svg viewBox="0 0 520 98" style="width:100%;height:auto" role="img" aria-label="finishing position distribution">${bars}</svg>
     <p class="charttitle" style="margin-top:18px">Opening fixtures — win / draw / loss</p>
@@ -827,6 +897,116 @@ function markScrollables(root) {
 <script id="calibrated-data">
 /* Written by tools/embed_calibrated.py from teams_calibrated.json */
 CALIBRATED_TEAMS = {"Arsenal": {"attack": 1.1961, "defence": 0.715, "home": 1.0012, "elo": 1869.6}, "Manchester City": {"attack": 1.2323, "defence": 0.8065, "home": 1.0953, "elo": 1840.9}, "Liverpool": {"attack": 1.2318, "defence": 0.9741, "home": 0.9614, "elo": 1750.9}, "Manchester United": {"attack": 1.1126, "defence": 0.9574, "home": 1.0288, "elo": 1786.6}, "Chelsea": {"attack": 1.0806, "defence": 0.9664, "home": 0.9078, "elo": 1694.3}, "Aston Villa": {"attack": 1.0254, "defence": 0.9577, "home": 1.0655, "elo": 1759.1}, "Newcastle United": {"attack": 0.9749, "defence": 0.9989, "home": 1.2016, "elo": 1685.4}, "Tottenham Hotspur": {"attack": 0.9729, "defence": 1.0826, "home": 0.931, "elo": 1609.9}, "Crystal Palace": {"attack": 0.8932, "defence": 0.9842, "home": 0.9058, "elo": 1664.2}, "Brighton": {"attack": 1.0252, "defence": 0.9448, "home": 0.9883, "elo": 1712.3}, "Nottingham Forest": {"attack": 1.0893, "defence": 0.9337, "home": 0.7829, "elo": 1688.8}, "Bournemouth": {"attack": 1.1019, "defence": 0.9501, "home": 0.8927, "elo": 1760.6}, "Brentford": {"attack": 1.0104, "defence": 0.9808, "home": 1.0893, "elo": 1710.5}, "Fulham": {"attack": 0.8812, "defence": 0.9592, "home": 1.0811, "elo": 1688.9}, "Everton": {"attack": 0.8828, "defence": 0.939, "home": 1.0408, "elo": 1674.2}, "Sunderland": {"attack": 0.7501, "defence": 0.9755, "home": 0.9953, "elo": 1707.2}, "Leeds United": {"attack": 0.8912, "defence": 0.9704, "home": 1.1274, "elo": 1743.7}, "Coventry City": {"attack": 0.8447, "defence": 1.2011, "home": 1.0084, "elo": 1779.5}, "Ipswich Town": {"attack": 0.8024, "defence": 1.2529, "home": 0.9474, "elo": 1716.5}, "Hull City": {"attack": 0.6806, "defence": 1.4496, "home": 0.948, "elo": 1656.9}};
+</script>
+<script id="history-data">
+/* Weekly odds snapshots (tools/snapshot_history.py) */
+ODDS_HISTORY = [
+ {
+  "date": "2026-07-10",
+  "clubs": {
+   "Arsenal": {
+    "title": 38.87,
+    "top4": 86.2,
+    "rel": 0.0
+   },
+   "Manchester City": {
+    "title": 38.66,
+    "top4": 84.6,
+    "rel": 0.01
+   },
+   "Liverpool": {
+    "title": 6.79,
+    "top4": 43.94,
+    "rel": 0.28
+   },
+   "Manchester United": {
+    "title": 3.65,
+    "top4": 32.19,
+    "rel": 0.7
+   },
+   "Chelsea": {
+    "title": 1.54,
+    "top4": 16.48,
+    "rel": 2.06
+   },
+   "Aston Villa": {
+    "title": 1.9,
+    "top4": 21.69,
+    "rel": 1.38
+   },
+   "Newcastle United": {
+    "title": 1.49,
+    "top4": 18.85,
+    "rel": 1.72
+   },
+   "Tottenham Hotspur": {
+    "title": 0.13,
+    "top4": 2.49,
+    "rel": 13.92
+   },
+   "Crystal Palace": {
+    "title": 0.06,
+    "top4": 2.62,
+    "rel": 13.99
+   },
+   "Brighton": {
+    "title": 1.63,
+    "top4": 18.53,
+    "rel": 1.76
+   },
+   "Nottingham Forest": {
+    "title": 0.9,
+    "top4": 12.1,
+    "rel": 3.24
+   },
+   "Bournemouth": {
+    "title": 1.79,
+    "top4": 19.77,
+    "rel": 1.78
+   },
+   "Brentford": {
+    "title": 1.37,
+    "top4": 17.97,
+    "rel": 2.1
+   },
+   "Fulham": {
+    "title": 0.42,
+    "top4": 6.62,
+    "rel": 5.36
+   },
+   "Everton": {
+    "title": 0.39,
+    "top4": 7.03,
+    "rel": 6.07
+   },
+   "Sunderland": {
+    "title": 0.01,
+    "top4": 0.65,
+    "rel": 28.03
+   },
+   "Leeds United": {
+    "title": 0.4,
+    "top4": 8.06,
+    "rel": 4.94
+   },
+   "Coventry City": {
+    "title": 0.0,
+    "top4": 0.18,
+    "rel": 45.29
+   },
+   "Ipswich Town": {
+    "title": 0.0,
+    "top4": 0.03,
+    "rel": 70.27
+   },
+   "Hull City": {
+    "title": 0.0,
+    "top4": 0.0,
+    "rel": 97.1
+   }
+  }
+ }
+];
 </script>
 <script id="fixtures-data">
 /* Official 2026/27 fixture list (openfootball), embedded by

@@ -1,6 +1,7 @@
 """Inject calibrated ratings and the real fixture list into index.html."""
 
 import json
+import os
 import re
 import sys
 
@@ -44,6 +45,17 @@ html, n = re.subn(
 )
 if n != 1:
     raise SystemExit("fixtures-data block not found in index.html")
+
+hist = "null"
+if os.path.exists("data/history.json"):
+    with open("data/history.json", encoding="utf-8") as fh:
+        hist = fh.read().strip()
+hist_block = ('<script id="history-data">\n'
+              "/* Weekly odds snapshots (tools/snapshot_history.py) */\n"
+              f"ODDS_HISTORY = {hist};\n</script>")
+html, n = re.subn(r'<script id="history-data">.*?</script>', hist_block, html, flags=re.S)
+if n != 1:
+    raise SystemExit("history-data block not found in index.html")
 
 with open("index.html", "w", encoding="utf-8") as fh:
     fh.write(html)

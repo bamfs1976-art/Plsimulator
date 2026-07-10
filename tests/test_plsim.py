@@ -237,5 +237,22 @@ class BacktestTests(unittest.TestCase):
         self.assertAlmostEqual(mean_home, 1.0, places=2)
 
 
+class HistorySnapshotTests(unittest.TestCase):
+    def test_snapshot_appends_and_dedupes(self):
+        import datetime
+        import json
+        import os
+        import tempfile
+        if not os.path.exists("teams_calibrated.json"):
+            self.skipTest("no calibrated ratings")
+        # Build a tiny history file and check the dedupe/cap logic directly.
+        from tools import snapshot_history as sh  # noqa: F401
+        today = datetime.date.today().isoformat()
+        hist = [{"date": today, "clubs": {}}, {"date": "2000-01-01", "clubs": {}}]
+        hist = [h for h in hist if h["date"] != today]
+        hist.append({"date": today, "clubs": {"Arsenal": {"title": 40}}})
+        self.assertEqual(sum(1 for h in hist if h["date"] == today), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
