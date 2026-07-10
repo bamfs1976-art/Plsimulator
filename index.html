@@ -3,7 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Premier League 2026/27 Simulator</title>
+<title>Premier League 2026/27 Simulator — 10,000 seasons, updated weekly</title>
+<meta name="description" content="Monte Carlo predictions for the 2026/27 Premier League: title odds, relegation risk and club-by-club forecasts. Backtested within 0.007 RPS of Pinnacle closing odds.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Premier League 2026/27 Simulator">
+<meta property="og:description" content="10,000 simulated seasons of the real fixture list — recalibrated weekly. Backtested against the betting market.">
+<meta property="og:url" content="https://plsimulation.netlify.app/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%232a78d6'/%3E%3Ctext x='8' y='11.5' font-size='9' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3EPL%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -22,11 +31,26 @@
       --accent: #3987e5; --danger: #e66767;
     }
   }
+  :root {
+    --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+    --font-body: 'Public Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --grad: linear-gradient(118deg, #2456b8 0%, #2a78d6 48%, #6c56c9 100%);
+    --grad-glow: 0 6px 24px rgba(42, 120, 214, .25);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --grad: linear-gradient(118deg, #2f6fd8 0%, #3f8ce8 48%, #8a74e8 100%);
+      --grad-glow: 0 6px 26px rgba(63, 140, 232, .22);
+    }
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--surface); color: var(--text-1);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 15px/1.55 var(--font-body);
   }
+  h1, h2, .charttitle, .hero .v { font-family: var(--font-display); letter-spacing: -.02em; }
+  td, .hero .v, .mover { font-variant-numeric: tabular-nums; }
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
   h1 { font-size: 26px; margin: 0 0 4px; }
   .sub { color: var(--text-2); margin: 0 0 20px; }
@@ -46,9 +70,13 @@
   }
   .check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 8px; }
   button.primary {
-    background: var(--accent); color: #fff; border: none; border-radius: 6px;
+    background: var(--grad); color: #fff; border: none; border-radius: 8px;
     padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+    box-shadow: var(--grad-glow);
+    transition: transform .12s ease, filter .15s ease;
   }
+  button.primary:active { transform: scale(.96); }
+  @media (hover: hover) { button.primary:hover { filter: brightness(1.07); } }
   button.primary:disabled { opacity: .5; cursor: default; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; }
   th, td { text-align: right; padding: 5px 9px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
@@ -80,13 +108,28 @@
   .hero {
     display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 18px;
   }
+  .hero { background: var(--grad); border-radius: 14px; padding: 12px; box-shadow: var(--grad-glow); }
   .hero .stat {
-    flex: 1 1 150px; background: var(--surface-2); border-radius: 10px;
-    padding: 12px 14px; min-width: 150px;
+    flex: 1 1 150px; background: rgba(255,255,255,.13); border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.18);
+    padding: 12px 14px; min-width: 0;
   }
-  .hero .k { font-size: 12px; color: var(--text-2); }
-  .hero .v { font-size: 22px; font-weight: 700; line-height: 1.2; }
-  .hero .s { font-size: 12px; color: var(--text-3); }
+  .hero .k { font-size: 11px; color: rgba(255,255,255,.78); letter-spacing: .07em; text-transform: uppercase; font-weight: 700; }
+  .hero .v { font-size: 22px; font-weight: 800; line-height: 1.2; color: #fff; }
+  .hero .s { font-size: 12px; color: rgba(255,255,255,.75); }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .brand .mark {
+    width: 34px; height: 34px; border-radius: 9px; background: var(--grad);
+    color: #fff; font: 800 15px/34px var(--font-display); text-align: center;
+    box-shadow: var(--grad-glow); flex-shrink: 0;
+  }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+    margin-right: 7px; vertical-align: baseline; }
+  footer.site {
+    margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--border);
+    color: var(--text-3); font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  footer.site a { color: var(--accent); text-decoration: none; }
   .badge-acc {
     display: inline-block; background: var(--surface-2); color: var(--text-2);
     border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px;
@@ -125,7 +168,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Premier League 2026/27 Simulator</h1>
+  <div class="brand"><span class="mark">PL</span><h1 style="margin:0">Premier League 2026/27 Simulator</h1></div>
   <p class="sub">10,000 simulated seasons of the real 2026/27 fixture list — recalibrated weekly from results, entirely in your browser.</p>
   <span class="badge-acc" onclick="showTab('acc')">Backtested: within <b>0.007 RPS</b> of Pinnacle closing odds — see the evidence</span>
 
@@ -147,10 +190,10 @@
   </details>
 
   <div class="tabs">
-    <button data-tab="mc" class="active">Monte Carlo</button>
-    <button data-tab="md">Matchday</button>
-    <button data-tab="season">Full season</button>
-    <button data-tab="teams">Teams</button>
+    <button data-tab="mc" class="active">Season odds</button>
+    <button data-tab="md">Matchday forecast</button>
+    <button data-tab="season">Play a season</button>
+    <button data-tab="teams">Clubs</button>
     <button data-tab="acc">Accuracy</button>
   </div>
 
@@ -223,6 +266,11 @@
     <p class="note">Attack = scoring multiplier vs an average side. Defence = conceding multiplier (lower is better).
        Fitted ratings come from a joint Poisson fit of 2,796 Premier League + Championship results, 2023–26.</p>
   </div>
+  <footer class="site">
+    <span>Recalibrated every Monday from real results.</span>
+    <a href="https://gameweekedge.netlify.app">Play FPL? Gameweek Edge runs this exact model →</a>
+    <a href="https://github.com/bamfs1976-art/Plsimulator">Model &amp; code</a>
+  </footer>
 </div>
 
 <script>
@@ -245,6 +293,21 @@ let REAL_FIXTURES = null;     // official fixture list, injected when known
 const BASE_H = 1.62, BASE_A = 1.32, MAXG = 10, GRID = MAXG + 1;
 /* DC_RHO fitted by maximum likelihood on 2023-26 results (plsim calibrate) */
 const ELO_HOME = 60, ELO_SCALE = 0.45, DC_RHO = -0.074, LN10 = Math.log(10);
+
+/* Club colours for identity chips (primary kit colour). */
+const CLUB_COLOR = {
+  "Arsenal":"#EF0107","Aston Villa":"#67022a","Bournemouth":"#B50E12",
+  "Brentford":"#e30613","Brighton":"#0057B8","Chelsea":"#034694",
+  "Coventry City":"#59c1e8","Crystal Palace":"#1B458F","Everton":"#003399",
+  "Fulham":"#8a8a8a","Hull City":"#F5A12D","Ipswich Town":"#3a64a3",
+  "Leeds United":"#1D428A","Liverpool":"#C8102E","Manchester City":"#6CABDD",
+  "Manchester United":"#DA291C","Newcastle United":"#241F20",
+  "Nottingham Forest":"#DD0000","Tottenham Hotspur":"#132257","Sunderland":"#EB172B"
+};
+function clubDot(t) {
+  const c = CLUB_COLOR[t];
+  return c ? `<span class="dot" style="background:${c}"></span>` : "";
+}
 
 /* ---------------- prng ---------------- */
 function mulberry32(seed) {
@@ -495,7 +558,7 @@ function renderMC(names, posCounts, ptsSum, n) {
     <th>#</th><th class="t">Team</th><th>Title %</th><th>Top 4 %</th><th class="c-opt">Top 6 %</th>
     <th>Rel %</th><th class="c-opt">Avg pos</th><th class="c-opt">Avg pts</th></tr></thead><tbody>`;
   order.forEach((t, i) => {
-    html += `<tr class="clickable" data-team="${esc(t)}"><td>${i + 1}</td><td class="t">${esc(t)}</td>` +
+    html += `<tr class="clickable" data-team="${esc(t)}"><td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>` +
       `<td style="${bar(pct(t, 1, 1), 100, 'var(--series-1)')}">${pct(t, 1, 1).toFixed(2)}</td>` +
       `<td style="${bar(pct(t, 1, 4), 100, 'var(--series-1)')}">${pct(t, 1, 4).toFixed(2)}</td>` +
       `<td class="c-opt">${pct(t, 1, 6).toFixed(2)}</td>` +
@@ -683,7 +746,7 @@ function renderMatchday() {
     const [pH, pD, pA] = outcomeProbs(grid);
     const [mh, ma] = likelyScore(grid);
     const [sh, sa] = sampleScore(cumulative(grid), rnd);
-    html += `<tr><td class="t">${esc(h)}</td><td class="t">${esc(a)}</td>` +
+    html += `<tr><td class="t">${clubDot(h)}${esc(h)}</td><td class="t">${clubDot(a)}${esc(a)}</td>` +
       `<td>${(pH * 100).toFixed(1)}</td><td>${(pD * 100).toFixed(1)}</td><td>${(pA * 100).toFixed(1)}</td>` +
       `<td>${lh.toFixed(2)}–${la.toFixed(2)}</td><td>${mh}-${ma}</td><td><strong>${sh}-${sa}</strong></td></tr>`;
   }
@@ -712,7 +775,7 @@ document.getElementById("run-season").onclick = () => {
     <th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>`;
   order.forEach((t, i) => {
     const r = table[t], cls = i < 4 ? "cl" : (i >= 17 ? "rel" : "");
-    html += `<tr class="${cls}"><td>${i + 1}</td><td class="t">${esc(t)}</td><td>${r.W}</td><td>${r.D}</td>` +
+    html += `<tr class="${cls}"><td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td><td>${r.W}</td><td>${r.D}</td>` +
       `<td>${r.L}</td><td>${r.GF}</td><td>${r.GA}</td><td>${r.GF - r.GA > 0 ? "+" : ""}${r.GF - r.GA}</td>` +
       `<td><strong>${r.Pts}</strong></td></tr>`;
   });
@@ -729,7 +792,7 @@ function renderTeams() {
     <th>Attack</th><th>Defence</th><th>Elo</th></tr></thead><tbody>`;
   for (const t of order) {
     const r = teams[t];
-    html += `<tr><td class="t">${esc(t)}</td><td>${r.attack.toFixed(2)}</td>` +
+    html += `<tr><td class="t">${clubDot(t)}${esc(t)}</td><td>${r.attack.toFixed(2)}</td>` +
       `<td>${r.defence.toFixed(2)}</td><td>${Math.round(r.elo)}</td></tr>`;
   }
   document.getElementById("teams-out").innerHTML = html + "</tbody></table></div>";
