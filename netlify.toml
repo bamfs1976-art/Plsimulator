@@ -4,3 +4,11 @@
 [build]
   publish = "."
   command = ""
+
+# The shared model bundle both this site and Gameweek Edge consume.
+# Public, cacheable, CORS-open so other origins can fetch it.
+[[headers]]
+  for = "/model.json"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=3600"

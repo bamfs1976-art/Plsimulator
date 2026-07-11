@@ -277,5 +277,24 @@ class FormTests(unittest.TestCase):
             self.assertLessEqual(w["ppg"], 3.0)
 
 
+class BundleTests(unittest.TestCase):
+    def test_bundle_shape(self):
+        import os
+        if not (os.path.isdir("data") and os.path.exists("teams_calibrated.json")):
+            self.skipTest("no cached data / ratings")
+        from tools.build_bundle import build
+        b = build()
+        self.assertEqual(set(b) >= {"version", "constants", "teams", "fixtures",
+                                    "form", "season_state", "odds_history", "meta"}, True)
+        self.assertEqual(len(b["teams"]), 20)
+        self.assertEqual(len(b["form"]), 20)
+        for k in ("BASE_H", "BASE_A", "DC_RHO"):
+            self.assertIn(k, b["constants"])
+        if b["fixtures"]:
+            self.assertEqual(len(b["fixtures"]), 38)
+            self.assertTrue(all(len(md) == 10 for md in b["fixtures"]))
+        self.assertIn("live", b["season_state"])
+
+
 if __name__ == "__main__":
     unittest.main()
