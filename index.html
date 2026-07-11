@@ -192,6 +192,7 @@
   <div class="tabs">
     <button data-tab="mc" class="active">Season odds</button>
     <button data-tab="md">Matchday forecast</button>
+    <button data-tab="scenario">Scenario Lab</button>
     <button data-tab="season">Play a season</button>
     <button data-tab="teams">Clubs</button>
     <button data-tab="acc">Accuracy</button>
@@ -221,6 +222,33 @@
       <button class="primary" id="run-md">Show</button>
     </div>
     <div id="md-out"></div>
+  </div>
+
+  <div class="panel" id="panel-scenario">
+    <p class="note" style="margin-bottom:12px">Pin real or hypothetical results — a win, a draw or an exact score — then
+      re-run the simulation to see how the title, European and relegation odds shift. Everything you don't pin is
+      simulated as normal.</p>
+    <div class="controls">
+      <div class="ctl"><label for="sc-md">Matchday</label><select id="sc-md"></select></div>
+      <div class="ctl"><label for="sc-fx">Fixture</label><select id="sc-fx"></select></div>
+      <div class="ctl"><label for="sc-res">Result</label><select id="sc-res">
+        <option value="H">Home win</option><option value="D">Draw</option>
+        <option value="A">Away win</option><option value="score">Exact score…</option></select></div>
+      <div class="ctl" id="sc-score" style="display:none"><label>Score (H–A)</label>
+        <span><input type="number" id="sc-hg" min="0" max="10" value="1" style="width:52px"> –
+        <input type="number" id="sc-ag" min="0" max="10" value="0" style="width:52px"></span></div>
+      <button class="primary" id="sc-add">Add pin</button>
+    </div>
+    <div id="sc-list" style="margin:6px 0 12px"></div>
+    <div class="controls">
+      <div class="ctl"><label for="sc-sims">Seasons</label><select id="sc-sims">
+        <option>2000</option><option selected>5000</option><option>10000</option><option>25000</option></select></div>
+      <button class="primary" id="sc-run">Run scenario</button>
+      <button id="sc-clear" style="background:var(--surface-2);color:var(--text-1);border:1px solid var(--border)">Clear all</button>
+      <span class="note" id="sc-status"></span>
+    </div>
+    <div class="prog" id="sc-prog"><div></div></div>
+    <div id="sc-out"></div>
   </div>
 
   <div class="panel" id="panel-season">
@@ -448,6 +476,85 @@ function likelyScore(grid) {
   for (let i = 1; i < grid.length; i++) if (grid[i] > grid[best]) best = i;
   return [Math.floor(best / GRID), best % GRID];
 }
+/* Goal-market probabilities + most-likely correct scores from a score grid. */
+function marketStats(grid) {
+  let btts = 0, over = 0;
+  const cells = [];
+  for (let h = 0; h < GRID; h++) for (let a = 0; a < GRID; a++) {
+    const p = grid[h * GRID + a];
+    if (h >= 1 && a >= 1) btts += p;
+    if (h + a >= 3) over += p;
+    cells.push([h, a, p]);
+  }
+  cells.sort((x, y) => y[2] - x[2]);
+  return { btts, over, under: 1 - over, top: cells.slice(0, 5) };
+}
+/* Cumulative distribution restricted to one outcome (H/D/A), renormalised —
+   lets the Scenario Lab pin a result while keeping a realistic scoreline. */
+function conditionalCum(grid, kind) {
+  const g = new Float64Array(grid.length); let s = 0;
+  for (let h = 0; h < GRID; h++) for (let a = 0; a < GRID; a++) {
+    const i = h * GRID + a;
+    const ok = kind === "H" ? h > a : kind === "A" ? a > h : h === a;
+    if (ok) { g[i] = grid[i]; s += grid[i]; }
+  }
+  if (s > 0) for (let i = 0; i < g.length; i++) g[i] /= s;
+  return cumulative(g);
+}
+/* Model expected points from each club's schedule (win×3 + draw). */
+function scheduleXPts(cfg, names, fixtures) {
+  const xp = {}, gp = {};
+  names.forEach(n => { xp[n] = 0; gp[n] = 0; });
+  fixtures.forEach(md => md.forEach(([h, a]) => {
+    const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+    const [pH, pD, pA] = outcomeProbs(scoreGrid(lh, la, cfg.dc));
+    xp[h] += pH * 3 + pD; gp[h]++;
+    xp[a] += pA * 3 + pD; gp[a]++;
+  }));
+  return names.map(n => ({ name: n, xpg: xp[n] / (gp[n] || 1), total: xp[n] }));
+}
+/* Chunked Monte Carlo that honours pinned fixtures (f.fixed = [hg,ag]). */
+function runChunked(grids, names, nSims, seed, els, onDone) {
+  const posCounts = {}, ptsSum = {};
+  names.forEach(n => { posCounts[n] = new Array(20).fill(0); ptsSum[n] = 0; });
+  const rnd = mulberry32(seed);
+  let done = 0; const CHUNK = Math.max(200, Math.floor(nSims / 40));
+  const t0 = performance.now();
+  (function step() {
+    const end = Math.min(done + CHUNK, nSims);
+    for (; done < end; done++) {
+      const table = newTable(names);
+      for (const f of grids) {
+        let hg, ag;
+        if (f.fixed) { hg = f.fixed[0]; ag = f.fixed[1]; }
+        else { const s = sampleScore(f.cum, rnd); hg = s[0]; ag = s[1]; }
+        record(table, f.h, f.a, hg, ag);
+      }
+      standings(table, names).forEach((t, pos) => posCounts[t][pos]++);
+      names.forEach(n => ptsSum[n] += table[n].Pts);
+    }
+    if (els) { els.bar.style.width = (100 * done / nSims) + "%";
+      els.status.textContent = `${done.toLocaleString()} / ${nSims.toLocaleString()} seasons`; }
+    if (done < nSims) { setTimeout(step, 0); return; }
+    if (els) { els.status.textContent = `${nSims.toLocaleString()} seasons in ${((performance.now() - t0) / 1000).toFixed(1)}s`;
+      els.prog.style.display = "none"; }
+    onDone(posCounts, ptsSum);
+  })();
+}
+/* Build per-fixture samplers, pinning any overridden results. */
+function buildScenarioGrids(cfg, fixtures, overrides) {
+  const map = {}; overrides.forEach(o => map[o.md + "|" + o.h + "|" + o.a] = o);
+  const flat = [];
+  fixtures.forEach((md, i) => md.forEach(([h, a]) => {
+    const o = map[(i + 1) + "|" + h + "|" + a];
+    const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+    const grid = scoreGrid(lh, la, cfg.dc);
+    if (o && o.kind === "score") flat.push({ md: i + 1, h, a, fixed: [o.hg, o.ag] });
+    else if (o) flat.push({ md: i + 1, h, a, cum: conditionalCum(grid, o.kind) });
+    else flat.push({ md: i + 1, h, a, cum: cumulative(grid) });
+  }));
+  return flat;
+}
 
 /* ---------------- season sim ---------------- */
 function currentTeams() {
@@ -599,18 +706,18 @@ function renderMC(names, posCounts, ptsSum, n) {
   renderMovers(order, pct);
 
   let html = `<div class="scroll"><table><thead><tr>
-    <th>#</th><th class="t">Team</th><th>Title %</th><th>Top 4 %</th><th class="c-opt">Top 6 %</th>
+    <th>#</th><th class="t">Team</th><th>Title %</th><th>Top 4 %</th><th class="c-opt">Europe %</th>
     <th>Rel %</th><th class="c-opt">Avg pos</th><th class="c-opt">Avg pts</th></tr></thead><tbody>`;
   order.forEach((t, i) => {
     html += `<tr class="clickable" data-team="${esc(t)}"><td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>` +
       `<td style="${bar(pct(t, 1, 1), 100, 'var(--series-1)')}">${pct(t, 1, 1).toFixed(2)}</td>` +
       `<td style="${bar(pct(t, 1, 4), 100, 'var(--series-1)')}">${pct(t, 1, 4).toFixed(2)}</td>` +
-      `<td class="c-opt">${pct(t, 1, 6).toFixed(2)}</td>` +
+      `<td class="c-opt">${pct(t, 1, 7).toFixed(2)}</td>` +
       `<td style="${bar(pct(t, 18, 20), 100, 'var(--danger)')}">${pct(t, 18, 20).toFixed(2)}</td>` +
       `<td class="c-opt">${avgPos(t).toFixed(2)}</td><td class="c-opt">${(ptsSum[t] / n).toFixed(1)}</td></tr>`;
   });
   html += "</tbody></table></div>" +
-    '<p class="note" style="margin-top:8px">Tap any club for its full outlook — position odds, points range and fixture-by-fixture forecast.</p>';
+    '<p class="note" style="margin-top:8px">Europe % = a top-7 finish (UCL top 5, Europa 6th, Conference 7th — before domestic-cup routes). Tap any club for its full outlook: European breakdown, position odds, points range and fixture forecast.</p>';
   const titleRows = order.filter(t => pct(t, 1, 1) >= 0.05).map(t => ({ name: t, value: pct(t, 1, 1) }));
   const relRows = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20))
     .filter(t => pct(t, 18, 20) >= 0.05).map(t => ({ name: t, value: pct(t, 18, 20) }));
@@ -709,9 +816,12 @@ function openTeam(team) {
       const home = h === team;
       const win = home ? pH : pA;
       const opp = home ? a : h;
+      const ls = likelyScore(g);
+      const scoreStr = home ? `${ls[0]}-${ls[1]}` : `${ls[1]}-${ls[0]}`;
       fxRows += `<tr><td class="t">MD${md + 1} ${home ? "v" : "@"} ${esc(opp)}</td>` +
         `<td style="${bar(win * 100, 100, 'var(--series-1)')}">${Math.round(win * 100)}%</td>` +
-        `<td>${Math.round(pD * 100)}%</td><td>${Math.round((1 - win - pD) * 100)}%</td></tr>`;
+        `<td>${Math.round(pD * 100)}%</td><td>${Math.round((1 - win - pD) * 100)}%</td>` +
+        `<td>${scoreStr}</td></tr>`;
       shown++;
     }
   }
@@ -743,6 +853,8 @@ function openTeam(team) {
     <div class="hero" style="margin-bottom:16px">
       <div class="stat"><div class="k">Title</div><div class="v">${pctAt(0).toFixed(1)}%</div></div>
       <div class="stat"><div class="k">Top 4</div><div class="v">${(pctAt(0) + pctAt(1) + pctAt(2) + pctAt(3)).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">European</div><div class="v">${(pctAt(0)+pctAt(1)+pctAt(2)+pctAt(3)+pctAt(4)+pctAt(5)+pctAt(6)).toFixed(1)}%</div>
+        <div class="s">UCL ${(pctAt(0)+pctAt(1)+pctAt(2)+pctAt(3)+pctAt(4)).toFixed(0)} · EL ${pctAt(5).toFixed(0)} · ECL ${pctAt(6).toFixed(0)}</div></div>
       <div class="stat"><div class="k">Relegated</div><div class="v">${(pctAt(17) + pctAt(18) + pctAt(19)).toFixed(1)}%</div></div>
       <div class="stat"><div class="k">Points</div><div class="v">${q(0.5)}</div><div class="s">80% range ${q(0.1)}–${q(0.9)}</div></div>
     </div>
@@ -750,7 +862,7 @@ function openTeam(team) {
     <p class="charttitle">Finishing position odds</p>
     <svg viewBox="0 0 520 98" style="width:100%;height:auto" role="img" aria-label="finishing position distribution">${bars}</svg>
     <p class="charttitle" style="margin-top:18px">Opening fixtures — win / draw / loss</p>
-    <div class="scroll"><table><thead><tr><th class="t">Fixture</th><th>W</th><th>D</th><th>L</th></tr></thead><tbody>${fxRows}</tbody></table></div>`;
+    <div class="scroll"><table><thead><tr><th class="t">Fixture</th><th>W</th><th>D</th><th>L</th><th>Likely</th></tr></thead><tbody>${fxRows}</tbody></table></div>`;
   dlg.showModal();
 }
 
@@ -809,19 +921,26 @@ function renderMatchday() {
   const md = Math.min(38, Math.max(1, parseInt(document.getElementById("mdnum").value, 10) || 1));
   const rnd = mulberry32(cfg.seed * 1000 + md);
   let html = `<div class="scroll"><table><thead><tr><th class="t">Home</th><th class="t">Away</th>
-    <th>Home %</th><th>Draw %</th><th>Away %</th><th>xG</th><th>Likely</th><th>Simulated</th></tr></thead><tbody>`;
+    <th>Home %</th><th>Draw %</th><th>Away %</th><th>xG</th><th>BTTS %</th><th>O2.5 %</th>
+    <th>Likely scores</th></tr></thead><tbody>`;
   for (const [h, a] of fixtures[md - 1]) {
     const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
     const grid = scoreGrid(lh, la, cfg.dc);
     const [pH, pD, pA] = outcomeProbs(grid);
-    const [mh, ma] = likelyScore(grid);
-    const [sh, sa] = sampleScore(cumulative(grid), rnd);
+    const m = marketStats(grid);
+    const scores = m.top.slice(0, 3).map(c => `${c[0]}-${c[1]}`).join(" · ");
     html += `<tr><td class="t">${clubDot(h)}${esc(h)}</td><td class="t">${clubDot(a)}${esc(a)}</td>` +
-      `<td>${(pH * 100).toFixed(1)}</td><td>${(pD * 100).toFixed(1)}</td><td>${(pA * 100).toFixed(1)}</td>` +
-      `<td>${lh.toFixed(2)}–${la.toFixed(2)}</td><td>${mh}-${ma}</td><td><strong>${sh}-${sa}</strong></td></tr>`;
+      `<td style="${bar(pH * 100, 100, 'var(--series-1)')}">${(pH * 100).toFixed(0)}</td>` +
+      `<td>${(pD * 100).toFixed(0)}</td>` +
+      `<td style="${bar(pA * 100, 100, 'var(--series-2)')}">${(pA * 100).toFixed(0)}</td>` +
+      `<td>${lh.toFixed(2)}–${la.toFixed(2)}</td>` +
+      `<td>${(m.btts * 100).toFixed(0)}</td><td>${(m.over * 100).toFixed(0)}</td>` +
+      `<td>${esc(scores)}</td></tr>`;
   }
-  html += "</tbody></table></div>";
+  html += "</tbody></table></div>" +
+    '<p class="note" style="margin-top:8px">BTTS = both teams to score. O2.5 = over 2.5 goals. Likely scores = the three most probable correct scores from the model.</p>';
   document.getElementById("md-out").innerHTML = html;
+  markScrollables(document.getElementById("md-out"));
 }
 document.getElementById("run-md").onclick = renderMatchday;
 
@@ -856,8 +975,10 @@ document.getElementById("run-season").onclick = () => {
 
 /* ---------------- Teams ---------------- */
 function renderTeams() {
-  const teams = currentTeams();
-  const order = Object.keys(teams).sort((a, b) => teams[b].elo - teams[a].elo);
+  const cfg = ui();
+  const teams = cfg.teams;
+  const names = Object.keys(teams);
+  const order = [...names].sort((a, b) => teams[b].elo - teams[a].elo);
   let html = `<div class="scroll"><table><thead><tr><th class="t">Team</th>
     <th>Attack</th><th>Defence</th><th>Elo</th></tr></thead><tbody>`;
   for (const t of order) {
@@ -865,7 +986,125 @@ function renderTeams() {
     html += `<tr><td class="t">${clubDot(t)}${esc(t)}</td><td>${r.attack.toFixed(2)}</td>` +
       `<td>${r.defence.toFixed(2)}</td><td>${Math.round(r.elo)}</td></tr>`;
   }
-  document.getElementById("teams-out").innerHTML = html + "</tbody></table></div>";
+  html += "</tbody></table></div>";
+  /* Run-in difficulty: model expected points from each club's schedule. */
+  const sched = scheduleXPts(cfg, names, getFixtures(names)).sort((a, b) => b.xpg - a.xpg);
+  html += `<section class="block"><p class="charttitle">Run-in difficulty — projected points per game from the schedule</p>` +
+    `<div class="scroll"><table><thead><tr><th>#</th><th class="t">Team</th><th>xPts / game</th>` +
+    `<th class="c-opt">Season xPts</th></tr></thead><tbody>` +
+    sched.map((s, i) =>
+      `<tr><td>${i + 1}</td><td class="t">${clubDot(s.name)}${esc(s.name)}</td>` +
+      `<td style="${bar(s.xpg, 3, 'var(--series-1)')}">${s.xpg.toFixed(2)}</td>` +
+      `<td class="c-opt">${s.total.toFixed(1)}</td></tr>`).join("") +
+    `</tbody></table></div>` +
+    `<p class="note">Higher = an easier schedule. Model expected points (win×3 + draw) over every fixture, ` +
+    `so venue and opponent strength are both priced in; it becomes the run-in once results are in.</p></section>`;
+  document.getElementById("teams-out").innerHTML = html;
+  markScrollables(document.getElementById("teams-out"));
+}
+
+/* ---------------- Scenario Lab ---------------- */
+let SCENARIO = [];
+function scKey(o) { return o.md + "|" + o.h + "|" + o.a; }
+function scFixtures() { return getFixtures(Object.keys(currentTeams())); }
+function scFillFixtures() {
+  const md = +document.getElementById("sc-md").value;
+  const fx = scFixtures()[md - 1] || [];
+  const sel = document.getElementById("sc-fx"); sel.innerHTML = "";
+  fx.forEach(([h, a]) => sel.add(new Option(h + " v " + a, h + "|" + a)));
+}
+function scInit() {
+  const mdSel = document.getElementById("sc-md");
+  if (mdSel.options.length) return;                 // already initialised
+  for (let i = 1; i <= 38; i++) mdSel.add(new Option("Matchday " + i, i));
+  scFillFixtures();
+  mdSel.onchange = scFillFixtures;
+  document.getElementById("sc-res").onchange = e =>
+    document.getElementById("sc-score").style.display = e.target.value === "score" ? "" : "none";
+  document.getElementById("sc-add").onclick = scAdd;
+  document.getElementById("sc-clear").onclick = () => { SCENARIO = []; renderScList(); };
+  document.getElementById("sc-run").onclick = scRun;
+  renderScList();
+}
+function scAdd() {
+  const md = +document.getElementById("sc-md").value;
+  const fxv = document.getElementById("sc-fx").value; if (!fxv) return;
+  const [h, a] = fxv.split("|");
+  const kind = document.getElementById("sc-res").value;
+  const o = { md, h, a, kind };
+  if (kind === "score") {
+    o.hg = Math.max(0, Math.min(10, parseInt(document.getElementById("sc-hg").value, 10) || 0));
+    o.ag = Math.max(0, Math.min(10, parseInt(document.getElementById("sc-ag").value, 10) || 0));
+  }
+  SCENARIO = SCENARIO.filter(x => scKey(x) !== scKey(o));
+  SCENARIO.push(o);
+  renderScList();
+}
+function scLabel(o) {
+  const r = o.kind === "score" ? (o.hg + "–" + o.ag)
+    : o.kind === "H" ? (o.h + " win") : o.kind === "A" ? (o.a + " win") : "draw";
+  return "MD" + o.md + " " + o.h + " v " + o.a + " → " + r;
+}
+function renderScList() {
+  const box = document.getElementById("sc-list");
+  if (!SCENARIO.length) {
+    box.innerHTML = '<p class="note">No pinned results yet — add one above. Everything else is simulated as normal.</p>';
+    return;
+  }
+  box.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px">' + SCENARIO.map((o, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:4px 6px 4px 12px;font-size:13px">${esc(scLabel(o))}` +
+    `<button aria-label="remove" style="border:0;background:none;color:var(--text-3);cursor:pointer;font-size:16px;line-height:1" onclick="SCENARIO.splice(${i},1);renderScList()">×</button></span>`).join("") + "</div>";
+}
+function scRun() {
+  const cfg = ui();
+  const names = Object.keys(cfg.teams);
+  const grids = buildScenarioGrids(cfg, getFixtures(names), SCENARIO);
+  const n = parseInt(document.getElementById("sc-sims").value, 10) || 5000;
+  const prog = document.getElementById("sc-prog");
+  const els = { bar: prog.firstElementChild, status: document.getElementById("sc-status"), prog };
+  prog.style.display = "block";
+  const btn = document.getElementById("sc-run"); btn.disabled = true;
+  runChunked(grids, names, n, cfg.seed, els, (posCounts, ptsSum) => {
+    renderScenario(names, posCounts, ptsSum, n);
+    btn.disabled = false;
+  });
+}
+function renderScenario(names, posCounts, ptsSum, n) {
+  const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
+  const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
+  const order = [...names].sort((a, b) => pct(b, 1, 1) - pct(a, 1, 1) || avgPos(a) - avgPos(b));
+  const base = window.LAST_MC;
+  const bp = base ? (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += base.posCounts[t][i]; return 100 * s / base.n; } : null;
+  const cell = (t, a, b, danger) => {
+    const v = pct(t, a, b);
+    let d = "";
+    if (bp) {
+      const delta = v - bp(t, a, b);
+      if (Math.abs(delta) >= 0.05) {
+        const good = danger ? delta < 0 : delta > 0;
+        d = ` <span style="color:${good ? 'var(--series-2)' : 'var(--danger)'};font-size:.85em">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</span>`;
+      }
+    }
+    return v.toFixed(1) + d;
+  };
+  const favT = order[0], relOrder = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20));
+  let html = `<div class="hero">
+    <div class="stat"><div class="k">Title favourite (scenario)</div><div class="v">${esc(favT)}</div><div class="s">${pct(favT, 1, 1).toFixed(0)}% champion</div></div>
+    <div class="stat"><div class="k">Most likely to go down</div><div class="v">${esc(relOrder[0])}</div><div class="s">${pct(relOrder[0], 18, 20).toFixed(0)}% relegated</div></div>
+  </div>`;
+  html += `<div class="scroll"><table><thead><tr><th>#</th><th class="t">Team</th>
+    <th>Title %</th><th>Top 4 %</th><th>Europe %</th><th>Rel %</th></tr></thead><tbody>`;
+  order.forEach((t, i) => {
+    html += `<tr><td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>` +
+      `<td>${cell(t, 1, 1, false)}</td><td>${cell(t, 1, 4, false)}</td>` +
+      `<td>${cell(t, 1, 7, false)}</td><td>${cell(t, 18, 20, true)}</td></tr>`;
+  });
+  html += "</tbody></table></div>";
+  html += `<p class="note" style="margin-top:8px">${base
+    ? "Coloured numbers are the change vs the baseline (unpinned) Season-odds run — green is good for the club, red is bad."
+    : "Run <b>Season odds</b> once to see the change each pin makes."} ${SCENARIO.length} result${SCENARIO.length === 1 ? "" : "s"} pinned across ${n.toLocaleString()} seasons.</p>`;
+  document.getElementById("sc-out").innerHTML = html;
+  markScrollables(document.getElementById("sc-out"));
 }
 
 /* ---------------- tabs & init ---------------- */
@@ -874,6 +1113,7 @@ function showTab(tab) {
   document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + tab));
   if (tab === "teams") renderTeams();
   if (tab === "md") renderMatchday();
+  if (tab === "scenario") scInit();
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 document.getElementById("ratings").onchange = renderTeams;
