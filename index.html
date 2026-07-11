@@ -1245,9 +1245,26 @@ function showTab(tab) {
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 document.getElementById("ratings").onchange = renderTeams;
 
+/* Live model bundle: model.json is the single source of truth (published by
+   the weekly job); the embedded blocks below are the offline fallback. If the
+   bundle is reachable it overrides them before the first run, so this site and
+   Gameweek Edge always show identical numbers. */
+async function hydrateFromBundle() {
+  try {
+    const r = await fetch("model.json", { cache: "no-store" });
+    if (!r.ok) return;
+    const m = await r.json();
+    if (m.teams) CALIBRATED_TEAMS = m.teams;
+    if (m.fixtures) REAL_FIXTURES = m.fixtures;
+    if (m.odds_history) ODDS_HISTORY = m.odds_history;
+    if (m.form) TEAM_FORM = m.form;
+    if (m.season_state) SEASON_STATE = m.season_state;
+  } catch (_) { /* offline: the embedded fallback stands */ }
+}
 /* Auto-run: the visitor should see the answer, not a button. */
 window.addEventListener("DOMContentLoaded", () => {
-  setTimeout(() => document.getElementById("run-mc").click(), 60);
+  hydrateFromBundle().finally(() =>
+    setTimeout(() => document.getElementById("run-mc").click(), 30));
 });
 
 /* Scroll-fade cue on any horizontally clipped table. */
