@@ -254,5 +254,28 @@ class HistorySnapshotTests(unittest.TestCase):
         self.assertEqual(sum(1 for h in hist if h["date"] == today), 1)
 
 
+class FormTests(unittest.TestCase):
+    def test_form_from_cached_data(self):
+        import os
+        if not (os.path.isdir("data") and os.path.exists("teams_calibrated.json")):
+            self.skipTest("no cached data / ratings")
+        from tools.build_form import build
+        form, state = build()
+        self.assertEqual(len(form), 20)
+        self.assertIn(state["season"], ("", None) + tuple(
+            f"{y}-{str(y + 1)[-2:]}" for y in range(2020, 2035)))
+        # Every club has the three windows for each split.
+        for f in form.values():
+            for split in ("overall", "home", "away"):
+                self.assertEqual(set(f[split]), {"5", "10", "20"})
+        # A club that played a full season sums to its points.
+        played = [f for f in form.values() if f["played"] >= 20]
+        self.assertTrue(played, "expected at least one club with matches")
+        for f in played:
+            w = f["season"]
+            self.assertEqual(w["pts"], 3 * w["w"] + w["d"])
+            self.assertLessEqual(w["ppg"], 3.0)
+
+
 if __name__ == "__main__":
     unittest.main()

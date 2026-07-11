@@ -76,6 +76,7 @@ def main():
 
     subprocess.run([sys.executable, "tools/snapshot_history.py"], check=True)
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
+    subprocess.run([sys.executable, "tools/build_form.py"], check=True)
     print("done")
 
 
