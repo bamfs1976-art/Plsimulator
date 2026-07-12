@@ -84,6 +84,9 @@
   th.t, td.t { text-align: left; }
   tr.cl td { box-shadow: inset 3px 0 0 var(--series-1); }
   tr.rel td { box-shadow: inset 3px 0 0 var(--danger); }
+  tr.b-title td { box-shadow: inset 3px 0 0 #d4a017; }
+  tr.b-ucl td { box-shadow: inset 3px 0 0 var(--series-1); }
+  tr.b-uel td { box-shadow: inset 3px 0 0 var(--series-2); }
   .scroll { overflow-x: auto; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
   @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
@@ -784,6 +787,24 @@ function renderMC(names, posCounts, ptsSum, n, pinned) {
     `<p class="note" style="margin-top:8px">${pinned
       ? `Conditioned on the season so far: the ${pinned} played result${pinned === 1 ? "" : "s"} are locked in and only the remaining ${380 - pinned} fixtures are simulated. `
       : ""}Europe % = a top-7 finish (UCL top 5, Europa 6th, Conference 7th — before domestic-cup routes). Tap any club for its full outlook: European breakdown, position odds, points range and fixture forecast.</p>`;
+  /* Projected final table: same run, framed as the expected-points table. */
+  const mlPos = t => posCounts[t].indexOf(Math.max(...posCounts[t])) + 1;
+  const projOrder = [...names].sort((a, b) => ptsSum[b] - ptsSum[a] || avgPos(a) - avgPos(b));
+  html += `<section class="block"><p class="charttitle">Projected final table — the average of ${n.toLocaleString()} seasons</p>` +
+    `<div class="scroll"><table><thead><tr><th>#</th><th class="t">Team</th><th>xPts</th>` +
+    `<th>Likely pos</th><th>Title %</th><th>Top 4 %</th><th>Rel %</th></tr></thead><tbody>`;
+  projOrder.forEach((t, i) => {
+    const band = i === 0 ? "b-title" : i < 5 ? "b-ucl" : i < 7 ? "b-uel" : i >= 17 ? "rel" : "";
+    html += `<tr class="clickable ${band}" data-team="${esc(t)}"><td>${i + 1}</td>` +
+      `<td class="t">${clubDot(t)}${esc(t)}</td>` +
+      `<td style="${bar(ptsSum[t] / n, 100, 'var(--series-1)')}"><strong>${(ptsSum[t] / n).toFixed(1)}</strong></td>` +
+      `<td>${mlPos(t)}</td><td>${pct(t, 1, 1).toFixed(1)}</td>` +
+      `<td>${pct(t, 1, 4).toFixed(1)}</td><td>${pct(t, 18, 20).toFixed(1)}</td></tr>`;
+  });
+  html += `</tbody></table></div>` +
+    `<p class="note" style="margin-top:8px">Ranked by expected points (xPts = mean final total across the runs). ` +
+    `Likely pos = the club's single most frequent finishing position. Gold edge = champions, blue = Champions League ` +
+    `(top 5), green = Europa/Conference (6th–7th), red = relegation zone.</p></section>`;
   const titleRows = order.filter(t => pct(t, 1, 1) >= 0.05).map(t => ({ name: t, value: pct(t, 1, 1) }));
   const relRows = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20))
     .filter(t => pct(t, 18, 20) >= 0.05).map(t => ({ name: t, value: pct(t, 18, 20) }));
