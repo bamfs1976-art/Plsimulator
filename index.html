@@ -1352,13 +1352,36 @@ document.getElementById("ratings").onchange = renderTeams;
    the weekly job); the embedded blocks below are the offline fallback. If the
    bundle is reachable it overrides them before the first run, so this site and
    Gameweek Edge always show identical numbers. */
+function validTeams(t) {
+  if (!t || typeof t !== "object" || Array.isArray(t)) return false;
+  const names = Object.keys(t);
+  if (names.length !== 20) return false;
+  const num = v => typeof v === "number" && isFinite(v) && v > 0;
+  return names.every(n => t[n] && typeof t[n] === "object" &&
+    num(t[n].attack) && num(t[n].defence));
+}
+function validFixtures(fx, teams) {
+  return Array.isArray(fx) && fx.length === 38 && fx.every(md =>
+    Array.isArray(md) && md.length === 10 && md.every(p =>
+      Array.isArray(p) && p.length === 2 && teams[p[0]] && teams[p[1]]));
+}
 async function hydrateFromBundle() {
   try {
     const r = await fetch("model.json", { cache: "no-store" });
     if (!r.ok) return;
     const m = await r.json();
+    /* Validate before swapping any state: a malformed bundle must never
+       replace the embedded fallback. */
+    if (!m || typeof m !== "object" || !validTeams(m.teams)) {
+      console.warn("model.json: invalid bundle shape, keeping embedded fallback");
+      return;
+    }
+    if (m.fixtures != null && !validFixtures(m.fixtures, m.teams)) {
+      console.warn("model.json: invalid fixtures shape, keeping embedded fallback");
+      return;
+    }
     if (m.constants) applyConstants(m.constants);
-    if (m.teams) CALIBRATED_TEAMS = m.teams;
+    CALIBRATED_TEAMS = m.teams;
     if (m.fixtures) REAL_FIXTURES = m.fixtures;
     if (m.odds_history) ODDS_HISTORY = m.odds_history;
     if (m.form) TEAM_FORM = m.form;

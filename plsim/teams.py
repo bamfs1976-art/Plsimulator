@@ -44,25 +44,49 @@ BASE_HOME_GOALS = 1.62
 BASE_AWAY_GOALS = 1.32
 
 
+def _require_positive_number(name, key, value, path):
+    """A rating must be a positive int/float (bool is a sneaky int)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"team {name!r} in {path}: {key!r} must be a number, "
+            f"got {type(value).__name__} ({value!r})")
+    if value <= 0:
+        raise ValueError(
+            f"team {name!r} in {path}: {key!r} must be positive, got {value!r}")
+
+
 def load_ratings(path=None):
     """Return (teams dict, meta dict) from a ratings JSON file.
 
     ``meta`` comes from the file's optional ``_meta`` block (fitted
     Dixon-Coles rho, fit settings); it is empty for the built-in
     defaults. Each team may carry an optional ``home`` multiplier
-    (per-club home advantage, 1.0 = league average).
+    (per-club home advantage, 1.0 = league average); a missing one is
+    filled in as 1.0. Ratings are validated: attack/defence/elo (and
+    home, when present) must be positive numbers.
     """
     if path is None:
         return {name: dict(r) for name, r in DEFAULT_TEAMS.items()}, {}
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: expected a JSON object of team ratings")
     meta = data.pop("_meta", {})
     if len(data) != 20:
         raise ValueError(f"expected 20 teams, got {len(data)} in {path}")
     for name, r in data.items():
+        if not isinstance(r, dict):
+            raise ValueError(
+                f"team {name!r} in {path}: expected an object with "
+                f"attack/defence/elo, got {type(r).__name__}")
         for key in ("attack", "defence", "elo"):
             if key not in r:
                 raise ValueError(f"team {name!r} in {path} is missing {key!r}")
+            _require_positive_number(name, key, r[key], path)
+        if "home" in r:
+            _require_positive_number(name, "home", r["home"], path)
+        else:
+            r["home"] = 1.0  # league-average home advantage
     return data, meta
 
 

@@ -138,6 +138,75 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(a.points_sum, b.points_sum)
 
 
+class LoadRatingsValidationTests(unittest.TestCase):
+    def _write(self, data):
+        import json
+        import os
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def _valid_teams(self):
+        from plsim.teams import DEFAULT_TEAMS
+        return {n: dict(r) for n, r in DEFAULT_TEAMS.items()}
+
+    def test_valid_file_loads_and_defaults_home(self):
+        from plsim.teams import load_ratings
+        teams, meta = load_ratings(self._write(self._valid_teams()))
+        self.assertEqual(len(teams), 20)
+        self.assertEqual(meta, {})
+        for r in teams.values():
+            self.assertEqual(r["home"], 1.0)  # missing home -> 1.0 default
+
+    def test_explicit_home_is_kept(self):
+        from plsim.teams import load_ratings
+        data = self._valid_teams()
+        data["Arsenal"]["home"] = 1.1
+        teams, _ = load_ratings(self._write(data))
+        self.assertEqual(teams["Arsenal"]["home"], 1.1)
+
+    def test_wrong_team_count_rejected(self):
+        from plsim.teams import load_ratings
+        data = self._valid_teams()
+        data.pop("Arsenal")
+        with self.assertRaisesRegex(ValueError, "expected 20 teams"):
+            load_ratings(self._write(data))
+
+    def test_non_numeric_rating_rejected(self):
+        from plsim.teams import load_ratings
+        for bad in ("1.2", None, True, [1.2]):
+            data = self._valid_teams()
+            data["Arsenal"]["attack"] = bad
+            with self.assertRaisesRegex(ValueError, "must be a number"):
+                load_ratings(self._write(data))
+
+    def test_non_positive_rating_rejected(self):
+        from plsim.teams import load_ratings
+        for key, bad in (("attack", 0), ("defence", -0.5), ("elo", -1),
+                         ("home", 0.0)):
+            data = self._valid_teams()
+            data["Arsenal"][key] = bad
+            with self.assertRaisesRegex(ValueError, "must be positive"):
+                load_ratings(self._write(data))
+
+    def test_missing_key_rejected(self):
+        from plsim.teams import load_ratings
+        data = self._valid_teams()
+        del data["Arsenal"]["defence"]
+        with self.assertRaisesRegex(ValueError, "missing 'defence'"):
+            load_ratings(self._write(data))
+
+    def test_non_object_team_rejected(self):
+        from plsim.teams import load_ratings
+        data = self._valid_teams()
+        data["Arsenal"] = [1.35, 0.7, 1900]
+        with self.assertRaisesRegex(ValueError, "expected an object"):
+            load_ratings(self._write(data))
+
+
 class CalibrateParserTests(unittest.TestCase):
     V_FORMAT = """\
 = English Premier League 2025/26
