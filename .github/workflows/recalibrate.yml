@@ -20,6 +20,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Optional: enables the market-odds benchmark refresh inside
+      # weekly_update.py. Best effort - the refit works without it.
+      - name: Install the odds mirror package (best effort)
+        run: pip install "git+https://github.com/AnishKhetani/premier-league-data" || echo "odds package unavailable; benchmark stays as committed"
+
       - name: Refresh data and refit ratings
         run: python3 tools/weekly_update.py
 

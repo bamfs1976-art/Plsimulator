@@ -159,6 +159,23 @@ def write_forecasts(ratings, info, today=None):
     print(f"forecasts: {len(fixtures)} fixtures over matchdays {mds_used}")
 
 
+def refresh_odds(seasons):
+    """Refresh the de-vigged closing-odds benchmark files, best effort.
+
+    Requires the premier-league-data package (see tools/build_odds.py);
+    when it is missing or the upstream mirror is down the benchmark
+    simply stays as committed - never fatal for the weekly refit.
+    """
+    from tools import build_odds
+
+    for season in seasons[-2:]:
+        try:
+            build_odds.build(season)
+        except Exception as exc:  # noqa: BLE001
+            print(f"odds refresh skipped for {season} "
+                  f"(market benchmark unchanged): {exc}")
+
+
 def main():
     seasons = current_seasons()
     refresh_newest(seasons)
@@ -179,6 +196,13 @@ def main():
                        check=True, timeout=600)
     except Exception as exc:  # noqa: BLE001
         print(f"xG refresh skipped: {exc}")
+
+    # Refresh the market-odds benchmark files (best effort - a missing
+    # package or mirror outage must not break the weekly refit).
+    try:
+        refresh_odds(seasons)
+    except Exception as exc:  # noqa: BLE001
+        print(f"odds refresh skipped (market benchmark unchanged): {exc}")
 
     # Score last week's forecasts against results that have landed since
     # (best effort - the ledger must never break the refit).
