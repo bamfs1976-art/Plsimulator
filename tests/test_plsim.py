@@ -295,6 +295,20 @@ class BundleTests(unittest.TestCase):
             self.assertTrue(all(len(md) == 10 for md in b["fixtures"]))
         self.assertIn("live", b["season_state"])
 
+    def test_bundle_rho_matches_calibrated_meta(self):
+        import json
+        import os
+        if not (os.path.isdir("data") and os.path.exists("teams_calibrated.json")):
+            self.skipTest("no cached data / ratings")
+        from tools.build_bundle import build
+        with open("teams_calibrated.json", encoding="utf-8") as fh:
+            meta = json.load(fh).get("_meta", {})
+        b = build()
+        if "rho" in meta:
+            # The fitted rho is the source of truth, not the hardcoded fallback.
+            self.assertEqual(b["constants"]["DC_RHO"], meta["rho"])
+            self.assertEqual(b["meta"].get("rho"), meta["rho"])
+
 
 if __name__ == "__main__":
     unittest.main()

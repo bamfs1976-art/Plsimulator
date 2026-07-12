@@ -11,7 +11,11 @@ from plsim.fixtures import load_real_fixtures  # noqa: E402
 
 with open("teams_calibrated.json", encoding="utf-8") as fh:
     ratings = json.load(fh)
-ratings.pop("_meta", None)  # fit metadata, not a team
+meta = ratings.pop("_meta", None) or {}  # fit metadata, not a team
+rho = meta.get("rho")
+rho_line = (f"DC_RHO = {rho};  /* fitted Dixon-Coles rho (_meta.rho) */\n"
+            if isinstance(rho, (int, float)) and not isinstance(rho, bool)
+            else "")
 
 with open("index.html", encoding="utf-8") as fh:
     html = fh.read()
@@ -20,6 +24,7 @@ block = (
     '<script id="calibrated-data">\n'
     "/* Written by tools/embed_calibrated.py from teams_calibrated.json */\n"
     f"CALIBRATED_TEAMS = {json.dumps(ratings)};\n"
+    f"{rho_line}"
     "</script>"
 )
 html, n = re.subn(
