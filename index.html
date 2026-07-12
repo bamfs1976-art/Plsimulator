@@ -408,7 +408,13 @@ function sparkline(values, color, label, higherIsBetter) {
 }
 /* Title race over the season: one line per contender, club colours. */
 function raceChart() {
-  if (!ODDS_HISTORY || ODDS_HISTORY.length < 3) return "";
+  if (!ODDS_HISTORY || ODDS_HISTORY.length < 3) {
+    const have = ODDS_HISTORY ? ODDS_HISTORY.length : 0;
+    return `<section class="block"><p class="charttitle">The title race — odds by week</p>` +
+      `<p class="note">Collecting weekly snapshots — ${have} of 3 needed before the chart can draw a line. ` +
+      `One is added by every Monday recalibration, so check back after the next update` +
+      `${have ? "" : "s"}.</p></section>`;
+  }
   const latest = ODDS_HISTORY[ODDS_HISTORY.length - 1].clubs;
   const clubs = Object.keys(latest).sort((a, b) => latest[b].title - latest[a].title).slice(0, 5);
   const n = ODDS_HISTORY.length, W = 560, H = 200, R = 110;
@@ -862,7 +868,11 @@ function renderMovers(order, pct) {
   if (!defaultCfg()) return;
   let prev = null;
   try { prev = JSON.parse(localStorage.getItem("plsim-snap") || "null"); } catch (_) {}
-  if (!prev || prev.hash === ratingsHash()) return;
+  if (!prev || prev.hash === ratingsHash()) {
+    box.innerHTML = '<div class="movers"><span class="mover" style="background:none;padding-left:0">' +
+      "Movers appear here once the model has been recalibrated since your last visit — check back after Monday's update.</span></div>";
+    return;
+  }
   const moves = order.map(t => ({
     t, d: pct(t, 1, 1) - (prev.title[t] || 0), rd: pct(t, 18, 20) - (prev.rel[t] || 0),
   }));
