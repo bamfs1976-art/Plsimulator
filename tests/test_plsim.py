@@ -89,6 +89,44 @@ class SimulationTests(unittest.TestCase):
         self.assertAlmostEqual(
             sum(agg.prob_relegated(t) for t in teams), 3.0, places=9)
 
+    def test_pinned_results_are_honoured(self):
+        teams = load_teams()
+        model = models.make_model("poisson", teams)
+        matchdays = generate_fixtures(teams)
+        md1_home, md1_away = matchdays[0][0]
+        pins = [{"md": 1, "home": md1_home, "away": md1_away, "hg": 7, "ag": 0}]
+        grids = simulate.pin_results(
+            simulate.fixture_grids(simulate.fixture_lambdas(model, matchdays)),
+            pins)
+        for seed in (0, 1, 2):
+            _table, results = simulate.simulate_season(grids, list(teams),
+                                                       random.Random(seed))
+            self.assertIn((1, md1_home, md1_away, 7, 0), results)
+
+    def test_all_results_pinned_is_deterministic(self):
+        teams = load_teams()
+        model = models.make_model("poisson", teams)
+        matchdays = generate_fixtures(teams)
+        # Pin all 380 fixtures: every simulated season is then identical.
+        pins = [{"md": md + 1, "home": h, "away": a,
+                 "hg": (md + len(h)) % 4, "ag": len(a) % 3}
+                for md, fixtures in enumerate(matchdays) for h, a in fixtures]
+        agg = simulate.monte_carlo(model, matchdays, list(teams), 50,
+                                   seed=9, workers=1, results=pins)
+        for t in teams:
+            self.assertEqual(agg.points_min[t], agg.points_max[t])
+            self.assertEqual(max(agg.pos_counts[t]), 50)
+
+    def test_unpinned_run_unchanged_by_empty_results(self):
+        teams = load_teams()
+        model = models.make_model("poisson", teams)
+        matchdays = generate_fixtures(teams)
+        a = simulate.monte_carlo(model, matchdays, list(teams), 100,
+                                 seed=7, workers=1)
+        b = simulate.monte_carlo(model, matchdays, list(teams), 100,
+                                 seed=7, workers=1, results=[])
+        self.assertEqual(a.points_sum, b.points_sum)
+
     def test_reproducible_with_seed(self):
         teams = load_teams()
         model = models.make_model("poisson", teams)

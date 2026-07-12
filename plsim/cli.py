@@ -112,16 +112,31 @@ def cmd_season(args):
     print(f"Relegated: {', '.join(standings[-3:])}")
 
 
+def _load_results(path):
+    """Played results to pin: a JSON list of {md,home,away,hg,ag} dicts,
+    or a model.json-style bundle carrying them under "results"."""
+    import json
+
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict):
+        data = data.get("results") or []
+    return data
+
+
 def cmd_montecarlo(args):
     """Monte Carlo over many seasons -> outcome probabilities."""
     teams, meta = load_ratings(args.teams)
     model = _build_model(args, teams)
     matchdays, _md_dates, _src = get_fixtures(teams)
     team_names = list(teams)
+    results = _load_results(args.results) if args.results else None
 
     label = model.name + ("+dixon-coles" if args.dixon_coles and not args.noise else "")
     if args.noise:
         label += f"+noise({args.noise:g})"
+    if results:
+        label += f"+{len(results)} played results pinned"
     print(f"Simulating {args.sims:,} seasons  (model: {label}) ...", flush=True)
     start = time.time()
 
@@ -133,6 +148,7 @@ def cmd_montecarlo(args):
         seed=args.seed, dixon_coles=args.dixon_coles,
         rho=meta.get("rho"), noise=args.noise, workers=args.workers,
         progress=progress if args.sims >= 20000 else None,
+        results=results,
     )
     elapsed = time.time() - start
     print(f"Done: {agg.n:,} seasons in {elapsed:.1f}s "
@@ -291,6 +307,10 @@ def build_parser():
                    help="worker processes (default: auto)")
     p.add_argument("--positions", action="store_true",
                    help="print the full 20x20 finishing-position matrix")
+    p.add_argument("--results", metavar="JSON",
+                   help="pin played results from a JSON file (a list of "
+                        "{md,home,away,hg,ag} or a model.json bundle) so "
+                        "only the remaining fixtures are simulated")
     p.set_defaults(func=cmd_montecarlo)
 
     p = sub.add_parser("calibrate",

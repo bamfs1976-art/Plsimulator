@@ -53,8 +53,25 @@ def build():
         "form": form,
         "season_state": state,
         "odds_history": odds,
+        "results": played_results(names),
         "meta": meta,
     }
+
+
+def played_results(names):
+    """Played FIXTURE_SEASON matches with scores, for conditioning the MC.
+
+    Returns a list of {md, home, away, hg, ag} (empty pre-season), so
+    consumers can pin the real results into the season simulation and
+    only simulate what is still to play.
+    """
+    known = set(names)
+    return [
+        {"md": m["md"], "home": m["home"], "away": m["away"],
+         "hg": m["hg"], "ag": m["ag"]}
+        for m in build_form.played_matches(FIXTURE_SEASON)
+        if m["home"] in known and m["away"] in known
+    ]
 
 
 if __name__ == "__main__":

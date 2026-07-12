@@ -343,6 +343,7 @@ let REAL_FIXTURES = null;     // official fixture list, injected when known
 let ODDS_HISTORY = null;      // weekly odds snapshots, injected when known
 let TEAM_FORM = null;         // recent form per club (tools/build_form.py)
 let SEASON_STATE = null;      // season label / matchdays played / live flag
+let PLAYED_RESULTS = null;    // played 2026/27 results, pinned by the MC
 const MAXG = 10, GRID = MAXG + 1, LN10 = Math.log(10);
 /* Model constants: reassignable so model.json's bundle constants (including
    the DC_RHO fitted by maximum likelihood in plsim calibrate) override the
@@ -567,12 +568,16 @@ function runChunked(grids, names, nSims, seed, els, onDone) {
     onDone(posCounts, ptsSum);
   })();
 }
-/* Build per-fixture samplers, pinning any overridden results. */
+/* Build per-fixture samplers, pinning any overridden results. Played real
+   results are pinned too, but a manual pin always wins over them. */
 function buildScenarioGrids(cfg, fixtures, overrides) {
   const map = {}; overrides.forEach(o => map[o.md + "|" + o.h + "|" + o.a] = o);
+  const played = playedResultMap(fixtures);
   const flat = [];
   fixtures.forEach((md, i) => md.forEach(([h, a]) => {
-    const o = map[(i + 1) + "|" + h + "|" + a];
+    const key = (i + 1) + "|" + h + "|" + a;
+    const o = map[key];
+    if (!o && played[key]) { flat.push({ md: i + 1, h, a, fixed: played[key] }); return; }
     const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
     const grid = scoreGrid(lh, la, cfg.dc);
     if (o && o.kind === "score") flat.push({ md: i + 1, h, a, fixed: [o.hg, o.ag] });
@@ -595,9 +600,30 @@ function ui() {
     seed: (parseInt(document.getElementById("seed").value, 10) || 42) >>> 0,
   };
 }
+/* Real results already played, keyed "md|home|away" -> [hg, ag]; only
+   entries matching the fixture list are kept. Empty pre-season, so the
+   simulation is then identical to an unconditioned run. */
+function playedResultMap(fixtures) {
+  const map = {};
+  if (!Array.isArray(PLAYED_RESULTS) || !PLAYED_RESULTS.length) return map;
+  const valid = {};
+  fixtures.forEach((md, i) => md.forEach(([h, a]) => valid[(i + 1) + "|" + h + "|" + a] = true));
+  PLAYED_RESULTS.forEach(r => {
+    if (!r || !Number.isInteger(r.hg) || !Number.isInteger(r.ag) ||
+        r.hg < 0 || r.ag < 0) return;
+    const k = r.md + "|" + r.home + "|" + r.away;
+    if (valid[k]) map[k] = [Math.min(r.hg, MAXG), Math.min(r.ag, MAXG)];
+  });
+  return map;
+}
+/* Per-fixture samplers; fixtures with a known real result are pinned
+   (f.fixed = [hg,ag]) so only the remaining games are simulated. */
 function buildGrids(cfg, names, fixtures) {
+  const played = playedResultMap(fixtures);
   const flat = [];
   fixtures.forEach((md, i) => md.forEach(([h, a]) => {
+    const real = played[(i + 1) + "|" + h + "|" + a];
+    if (real) { flat.push({ md: i + 1, h, a, fixed: real }); return; }
     const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
     flat.push({ md: i + 1, h, a, cum: cumulative(scoreGrid(lh, la, cfg.dc)) });
   }));
@@ -675,6 +701,7 @@ document.getElementById("run-mc").onclick = () => {
   const cfg = ui();
   const names = Object.keys(cfg.teams);
   const grids = buildGrids(cfg, names, getFixtures(names));
+  const pinned = grids.reduce((s, g) => s + (g.fixed ? 1 : 0), 0);
   const nSims = parseInt(document.getElementById("sims").value, 10);
   const rnd = mulberry32(cfg.seed);
   const posCounts = {}, ptsSum = {}, ptsHist = {};
@@ -691,7 +718,9 @@ document.getElementById("run-mc").onclick = () => {
     for (; done < end; done++) {
       const table = newTable(names);
       for (const f of grids) {
-        const [hg, ag] = sampleScore(f.cum, rnd);
+        let hg, ag;
+        if (f.fixed) { hg = f.fixed[0]; ag = f.fixed[1]; }
+        else { const s = sampleScore(f.cum, rnd); hg = s[0]; ag = s[1]; }
         record(table, f.h, f.a, hg, ag);
       }
       standings(table, names).forEach((t, pos) => posCounts[t][pos]++);
@@ -704,8 +733,8 @@ document.getElementById("run-mc").onclick = () => {
     const secs = (performance.now() - t0) / 1000;
     status.textContent = `${nSims.toLocaleString()} seasons in ${secs.toFixed(1)}s`;
     prog.style.display = "none";
-    window.LAST_MC = { names, posCounts, ptsSum, ptsHist, n: nSims, cfg };
-    renderMC(names, posCounts, ptsSum, nSims);
+    window.LAST_MC = { names, posCounts, ptsSum, ptsHist, n: nSims, cfg, pinned };
+    renderMC(names, posCounts, ptsSum, nSims, pinned);
     btn.disabled = false; mcRunning = false;
   })();
 };
@@ -713,7 +742,7 @@ function bar(v, max, color) {
   const w = Math.min(100, 100 * v / max);
   return `background:linear-gradient(90deg, color-mix(in srgb, ${color} 22%, transparent) ${w}%, transparent ${w}%)`;
 }
-function renderMC(names, posCounts, ptsSum, n) {
+function renderMC(names, posCounts, ptsSum, n, pinned) {
   const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
   const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
   const order = [...names].sort((a, b) => pct(b, 1, 1) - pct(a, 1, 1) || avgPos(a) - avgPos(b));
@@ -743,7 +772,9 @@ function renderMC(names, posCounts, ptsSum, n) {
       `<td class="c-opt">${avgPos(t).toFixed(2)}</td><td class="c-opt">${(ptsSum[t] / n).toFixed(1)}</td></tr>`;
   });
   html += "</tbody></table></div>" +
-    '<p class="note" style="margin-top:8px">Europe % = a top-7 finish (UCL top 5, Europa 6th, Conference 7th — before domestic-cup routes). Tap any club for its full outlook: European breakdown, position odds, points range and fixture forecast.</p>';
+    `<p class="note" style="margin-top:8px">${pinned
+      ? `Conditioned on the season so far: the ${pinned} played result${pinned === 1 ? "" : "s"} are locked in and only the remaining ${380 - pinned} fixtures are simulated. `
+      : ""}Europe % = a top-7 finish (UCL top 5, Europa 6th, Conference 7th — before domestic-cup routes). Tap any club for its full outlook: European breakdown, position odds, points range and fixture forecast.</p>`;
   const titleRows = order.filter(t => pct(t, 1, 1) >= 0.05).map(t => ({ name: t, value: pct(t, 1, 1) }));
   const relRows = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20))
     .filter(t => pct(t, 18, 20) >= 0.05).map(t => ({ name: t, value: pct(t, 18, 20) }));
@@ -978,7 +1009,9 @@ document.getElementById("run-season").onclick = () => {
   const rnd = mulberry32(cfg.seed);
   const table = newTable(names);
   for (const f of grids) {
-    const [hg, ag] = sampleScore(f.cum, rnd);
+    let hg, ag;
+    if (f.fixed) { hg = f.fixed[0]; ag = f.fixed[1]; }
+    else { const s = sampleScore(f.cum, rnd); hg = s[0]; ag = s[1]; }
     record(table, f.h, f.a, hg, ag);
   }
   const order = standings(table, names);
@@ -1262,6 +1295,7 @@ async function hydrateFromBundle() {
     if (m.odds_history) ODDS_HISTORY = m.odds_history;
     if (m.form) TEAM_FORM = m.form;
     if (m.season_state) SEASON_STATE = m.season_state;
+    if (Array.isArray(m.results)) PLAYED_RESULTS = m.results;
   } catch (_) { /* offline: the embedded fallback stands */ }
 }
 function applyConstants(c) {
@@ -1413,6 +1447,7 @@ ODDS_HISTORY = [
 /* Official 2026/27 fixture list (openfootball), embedded by
    tools/embed_calibrated.py; null falls back to a generated calendar. */
 REAL_FIXTURES = [[["Arsenal", "Coventry City"], ["Hull City", "Manchester United"], ["Ipswich Town", "Sunderland"], ["Nottingham Forest", "Leeds United"], ["Everton", "Crystal Palace"], ["Brentford", "Tottenham Hotspur"], ["Manchester City", "Bournemouth"], ["Brighton", "Aston Villa"], ["Newcastle United", "Liverpool"], ["Fulham", "Chelsea"]], [["Liverpool", "Nottingham Forest"], ["Manchester United", "Ipswich Town"], ["Sunderland", "Fulham"], ["Crystal Palace", "Manchester City"], ["Chelsea", "Brighton"], ["Aston Villa", "Arsenal"], ["Tottenham Hotspur", "Newcastle United"], ["Leeds United", "Brentford"], ["Bournemouth", "Everton"], ["Coventry City", "Hull City"]], [["Nottingham Forest", "Tottenham Hotspur"], ["Manchester City", "Coventry City"], ["Brighton", "Leeds United"], ["Brentford", "Sunderland"], ["Ipswich Town", "Liverpool"], ["Everton", "Manchester United"], ["Fulham", "Crystal Palace"], ["Hull City", "Aston Villa"], ["Arsenal", "Chelsea"], ["Newcastle United", "Bournemouth"]], [["Crystal Palace", "Ipswich Town"], ["Liverpool", "Fulham"], ["Aston Villa", "Nottingham Forest"], ["Tottenham Hotspur", "Everton"], ["Bournemouth", "Brentford"], ["Sunderland", "Arsenal"], ["Coventry City", "Brighton"], ["Leeds United", "Newcastle United"], ["Manchester United", "Manchester City"], ["Chelsea", "Hull City"]], [["Bournemouth", "Liverpool"], ["Fulham", "Manchester United"], ["Everton", "Ipswich Town"], ["Leeds United", "Crystal Palace"], ["Brighton", "Arsenal"], ["Tottenham Hotspur", "Aston Villa"], ["Newcastle United", "Hull City"], ["Nottingham Forest", "Coventry City"], ["Manchester City", "Sunderland"], ["Brentford", "Chelsea"]], [["Sunderland", "Brighton"], ["Arsenal", "Leeds United"], ["Hull City", "Everton"], ["Chelsea", "Bournemouth"], ["Crystal Palace", "Nottingham Forest"], ["Coventry City", "Newcastle United"], ["Liverpool", "Manchester City"], ["Ipswich Town", "Fulham"], ["Manchester United", "Tottenham Hotspur"], ["Aston Villa", "Brentford"]], [["Fulham", "Hull City"], ["Everton", "Chelsea"], ["Bournemouth", "Sunderland"], ["Leeds United", "Manchester United"], ["Tottenham Hotspur", "Coventry City"], ["Newcastle United", "Aston Villa"], ["Nottingham Forest", "Arsenal"], ["Brighton", "Crystal Palace"], ["Manchester City", "Ipswich Town"], ["Brentford", "Liverpool"]], [["Liverpool", "Brighton"], ["Crystal Palace", "Newcastle United"], ["Aston Villa", "Manchester City"], ["Manchester United", "Bournemouth"], ["Arsenal", "Everton"], ["Chelsea", "Tottenham Hotspur"], ["Coventry City", "Fulham"], ["Hull City", "Brentford"], ["Ipswich Town", "Nottingham Forest"], ["Sunderland", "Leeds United"]], [["Newcastle United", "Everton"], ["Manchester City", "Brighton"], ["Bournemouth", "Leeds United"], ["Coventry City", "Sunderland"], ["Chelsea", "Manchester United"], ["Tottenham Hotspur", "Crystal Palace"], ["Aston Villa", "Fulham"], ["Hull City", "Ipswich Town"], ["Brentford", "Nottingham Forest"], ["Liverpool", "Arsenal"]], [["Arsenal", "Hull City"], ["Nottingham Forest", "Manchester City"], ["Leeds United", "Tottenham Hotspur"], ["Fulham", "Newcastle United"], ["Everton", "Coventry City"], ["Crystal Palace", "Liverpool"], ["Sunderland", "Chelsea"], ["Ipswich Town", "Bournemouth"], ["Brighton", "Brentford"], ["Manchester United", "Aston Villa"]], [["Chelsea", "Leeds United"], ["Manchester City", "Fulham"], ["Aston Villa", "Sunderland"], ["Liverpool", "Manchester United"], ["Hull City", "Brighton"], ["Bournemouth", "Nottingham Forest"], ["Tottenham Hotspur", "Ipswich Town"], ["Brentford", "Everton"], ["Coventry City", "Crystal Palace"], ["Newcastle United", "Arsenal"]], [["Leeds United", "Coventry City"], ["Ipswich Town", "Aston Villa"], ["Arsenal", "Manchester City"], ["Manchester United", "Brentford"], ["Everton", "Liverpool"], ["Fulham", "Bournemouth"], ["Nottingham Forest", "Chelsea"], ["Brighton", "Newcastle United"], ["Sunderland", "Tottenham Hotspur"], ["Crystal Palace", "Hull City"]], [["Tottenham Hotspur", "Fulham"], ["Liverpool", "Sunderland"], ["Hull City", "Nottingham Forest"], ["Chelsea", "Crystal Palace"], ["Aston Villa", "Everton"], ["Brentford", "Arsenal"], ["Coventry City", "Ipswich Town"], ["Manchester City", "Leeds United"], ["Newcastle United", "Manchester United"], ["Bournemouth", "Brighton"]], [["Tottenham Hotspur", "Arsenal"], ["Manchester United", "Coventry City"], ["Leeds United", "Ipswich Town"], ["Newcastle United", "Sunderland"], ["Chelsea", "Liverpool"], ["Brentford", "Manchester City"], ["Bournemouth", "Hull City"], ["Aston Villa", "Crystal Palace"], ["Nottingham Forest", "Brighton"], ["Everton", "Fulham"]], [["Sunderland", "Nottingham Forest"], ["Crystal Palace", "Manchester United"], ["Hull City", "Tottenham Hotspur"], ["Brighton", "Everton"], ["Ipswich Town", "Newcastle United"], ["Coventry City", "Aston Villa"], ["Arsenal", "Bournemouth"], ["Manchester City", "Chelsea"], ["Liverpool", "Leeds United"], ["Fulham", "Brentford"]], [["Leeds United", "Fulham"], ["Brighton", "Ipswich Town"], ["Nottingham Forest", "Everton"], ["Brentford", "Newcastle United"], ["Manchester City", "Hull City"], ["Sunderland", "Crystal Palace"], ["Bournemouth", "Coventry City"], ["Arsenal", "Manchester United"], ["Liverpool", "Tottenham Hotspur"], ["Chelsea", "Aston Villa"]], [["Aston Villa", "Leeds United"], ["Manchester United", "Nottingham Forest"], ["Crystal Palace", "Arsenal"], ["Everton", "Sunderland"], ["Coventry City", "Chelsea"], ["Newcastle United", "Manchester City"], ["Fulham", "Brighton"], ["Tottenham Hotspur", "Bournemouth"], ["Hull City", "Liverpool"], ["Ipswich Town", "Brentford"]], [["Fulham", "Arsenal"], ["Coventry City", "Brentford"], ["Aston Villa", "Liverpool"], ["Newcastle United", "Nottingham Forest"], ["Hull City", "Leeds United"], ["Manchester United", "Sunderland"], ["Ipswich Town", "Chelsea"], ["Tottenham Hotspur", "Brighton"], ["Everton", "Manchester City"], ["Crystal Palace", "Bournemouth"]], [["Bournemouth", "Aston Villa"], ["Brentford", "Crystal Palace"], ["Leeds United", "Everton"], ["Arsenal", "Ipswich Town"], ["Sunderland", "Hull City"], ["Liverpool", "Coventry City"], ["Chelsea", "Newcastle United"], ["Nottingham Forest", "Fulham"], ["Brighton", "Manchester United"], ["Manchester City", "Tottenham Hotspur"]], [["Arsenal", "Brentford"], ["Leeds United", "Manchester City"], ["Manchester United", "Newcastle United"], ["Brighton", "Bournemouth"], ["Nottingham Forest", "Hull City"], ["Fulham", "Tottenham Hotspur"], ["Everton", "Aston Villa"], ["Sunderland", "Liverpool"], ["Crystal Palace", "Chelsea"], ["Ipswich Town", "Coventry City"]], [["Bournemouth", "Ipswich Town"], ["Manchester City", "Nottingham Forest"], ["Chelsea", "Sunderland"], ["Brentford", "Brighton"], ["Aston Villa", "Manchester United"], ["Tottenham Hotspur", "Leeds United"], ["Coventry City", "Everton"], ["Liverpool", "Crystal Palace"], ["Hull City", "Arsenal"], ["Newcastle United", "Fulham"]], [["Ipswich Town", "Hull City"], ["Everton", "Brentford"], ["Sunderland", "Coventry City"], ["Nottingham Forest", "Bournemouth"], ["Arsenal", "Newcastle United"], ["Leeds United", "Chelsea"], ["Fulham", "Aston Villa"], ["Manchester United", "Liverpool"], ["Brighton", "Manchester City"], ["Crystal Palace", "Tottenham Hotspur"]], [["Tottenham Hotspur", "Sunderland"], ["Brentford", "Manchester United"], ["Newcastle United", "Brighton"], ["Hull City", "Crystal Palace"], ["Coventry City", "Leeds United"], ["Bournemouth", "Fulham"], ["Chelsea", "Nottingham Forest"], ["Liverpool", "Everton"], ["Manchester City", "Arsenal"], ["Aston Villa", "Ipswich Town"]], [["Arsenal", "Liverpool"], ["Brighton", "Hull City"], ["Sunderland", "Aston Villa"], ["Crystal Palace", "Coventry City"], ["Ipswich Town", "Tottenham Hotspur"], ["Everton", "Newcastle United"], ["Fulham", "Manchester City"], ["Leeds United", "Bournemouth"], ["Manchester United", "Chelsea"], ["Nottingham Forest", "Brentford"]], [["Everton", "Leeds United"], ["Coventry City", "Liverpool"], ["Hull City", "Sunderland"], ["Aston Villa", "Bournemouth"], ["Crystal Palace", "Brentford"], ["Newcastle United", "Chelsea"], ["Fulham", "Nottingham Forest"], ["Tottenham Hotspur", "Manchester City"], ["Manchester United", "Brighton"], ["Ipswich Town", "Arsenal"]], [["Manchester City", "Newcastle United"], ["Bournemouth", "Crystal Palace"], ["Brentford", "Coventry City"], ["Chelsea", "Ipswich Town"], ["Liverpool", "Hull City"], ["Arsenal", "Fulham"], ["Nottingham Forest", "Manchester United"], ["Brighton", "Tottenham Hotspur"], ["Sunderland", "Everton"], ["Leeds United", "Aston Villa"]], [["Crystal Palace", "Sunderland"], ["Manchester United", "Arsenal"], ["Ipswich Town", "Brighton"], ["Coventry City", "Bournemouth"], ["Everton", "Nottingham Forest"], ["Fulham", "Leeds United"], ["Aston Villa", "Chelsea"], ["Tottenham Hotspur", "Liverpool"], ["Newcastle United", "Brentford"], ["Hull City", "Manchester City"]], [["Nottingham Forest", "Newcastle United"], ["Bournemouth", "Tottenham Hotspur"], ["Manchester City", "Everton"], ["Arsenal", "Crystal Palace"], ["Leeds United", "Hull City"], ["Sunderland", "Manchester United"], ["Liverpool", "Aston Villa"], ["Brighton", "Fulham"], ["Brentford", "Ipswich Town"], ["Chelsea", "Coventry City"]], [["Leeds United", "Brighton"], ["Tottenham Hotspur", "Nottingham Forest"], ["Crystal Palace", "Fulham"], ["Liverpool", "Ipswich Town"], ["Coventry City", "Manchester City"], ["Bournemouth", "Newcastle United"], ["Chelsea", "Arsenal"], ["Aston Villa", "Hull City"], ["Manchester United", "Everton"], ["Sunderland", "Brentford"]], [["Brentford", "Bournemouth"], ["Brighton", "Coventry City"], ["Manchester City", "Manchester United"], ["Ipswich Town", "Crystal Palace"], ["Arsenal", "Sunderland"], ["Fulham", "Liverpool"], ["Hull City", "Chelsea"], ["Nottingham Forest", "Aston Villa"], ["Everton", "Tottenham Hotspur"], ["Newcastle United", "Leeds United"]], [["Sunderland", "Ipswich Town"], ["Leeds United", "Nottingham Forest"], ["Manchester United", "Hull City"], ["Chelsea", "Fulham"], ["Liverpool", "Newcastle United"], ["Coventry City", "Arsenal"], ["Bournemouth", "Manchester City"], ["Crystal Palace", "Everton"], ["Tottenham Hotspur", "Brentford"], ["Aston Villa", "Brighton"]], [["Brighton", "Chelsea"], ["Fulham", "Sunderland"], ["Brentford", "Leeds United"], ["Nottingham Forest", "Liverpool"], ["Hull City", "Coventry City"], ["Arsenal", "Aston Villa"], ["Ipswich Town", "Manchester United"], ["Manchester City", "Crystal Palace"], ["Newcastle United", "Tottenham Hotspur"], ["Everton", "Bournemouth"]], [["Chelsea", "Manchester City"], ["Bournemouth", "Arsenal"], ["Tottenham Hotspur", "Hull City"], ["Manchester United", "Crystal Palace"], ["Everton", "Brighton"], ["Nottingham Forest", "Sunderland"], ["Newcastle United", "Ipswich Town"], ["Aston Villa", "Coventry City"], ["Brentford", "Fulham"], ["Leeds United", "Liverpool"]], [["Sunderland", "Newcastle United"], ["Brighton", "Nottingham Forest"], ["Coventry City", "Manchester United"], ["Hull City", "Bournemouth"], ["Manchester City", "Brentford"], ["Fulham", "Everton"], ["Liverpool", "Chelsea"], ["Arsenal", "Tottenham Hotspur"], ["Crystal Palace", "Aston Villa"], ["Ipswich Town", "Leeds United"]], [["Manchester City", "Liverpool"], ["Leeds United", "Arsenal"], ["Fulham", "Ipswich Town"], ["Nottingham Forest", "Crystal Palace"], ["Brentford", "Aston Villa"], ["Newcastle United", "Coventry City"], ["Brighton", "Sunderland"], ["Tottenham Hotspur", "Chelsea"], ["Everton", "Hull City"], ["Bournemouth", "Manchester United"]], [["Hull City", "Fulham"], ["Manchester United", "Leeds United"], ["Crystal Palace", "Brighton"], ["Aston Villa", "Newcastle United"], ["Chelsea", "Everton"], ["Coventry City", "Tottenham Hotspur"], ["Sunderland", "Bournemouth"], ["Liverpool", "Brentford"], ["Ipswich Town", "Manchester City"], ["Arsenal", "Nottingham Forest"]], [["Brentford", "Hull City"], ["Newcastle United", "Crystal Palace"], ["Tottenham Hotspur", "Manchester United"], ["Leeds United", "Sunderland"], ["Brighton", "Liverpool"], ["Nottingham Forest", "Ipswich Town"], ["Bournemouth", "Chelsea"], ["Fulham", "Coventry City"], ["Everton", "Arsenal"], ["Manchester City", "Aston Villa"]], [["Ipswich Town", "Everton"], ["Arsenal", "Brighton"], ["Liverpool", "Bournemouth"], ["Coventry City", "Nottingham Forest"], ["Aston Villa", "Tottenham Hotspur"], ["Hull City", "Newcastle United"], ["Manchester United", "Fulham"], ["Sunderland", "Manchester City"], ["Chelsea", "Brentford"], ["Crystal Palace", "Leeds United"]]];
+PLAYED_RESULTS = [];  /* played 2026-27 results, pinned by the MC */
 </script>
 </body>
 </html>

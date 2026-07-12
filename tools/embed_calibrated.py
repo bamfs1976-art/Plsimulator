@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, ".")
 
 from plsim.fixtures import load_real_fixtures  # noqa: E402
+from tools.build_bundle import FIXTURE_SEASON, played_results  # noqa: E402
 
 with open("teams_calibrated.json", encoding="utf-8") as fh:
     ratings = json.load(fh)
@@ -33,7 +34,9 @@ html, n = re.subn(
 if n != 1:
     raise SystemExit("calibrated-data block not found in index.html")
 
-real = load_real_fixtures(list(ratings))
+results_line = (f"PLAYED_RESULTS = {json.dumps(played_results(list(ratings)))};"
+                f"  /* played {FIXTURE_SEASON} results, pinned by the MC */\n")
+real = load_real_fixtures(list(ratings), season=FIXTURE_SEASON)
 if real:
     matchdays, _dates = real
     fx_block = (
@@ -41,10 +44,12 @@ if real:
         "/* Official 2026/27 fixture list (openfootball), embedded by\n"
         "   tools/embed_calibrated.py; null falls back to a generated calendar. */\n"
         f"REAL_FIXTURES = {json.dumps(matchdays)};\n"
+        f"{results_line}"
         "</script>"
     )
 else:
-    fx_block = ('<script id="fixtures-data">\nREAL_FIXTURES = null;\n</script>')
+    fx_block = ('<script id="fixtures-data">\nREAL_FIXTURES = null;\n'
+                f"{results_line}</script>")
 html, n = re.subn(
     r'<script id="fixtures-data">.*?</script>', fx_block, html, flags=re.S
 )

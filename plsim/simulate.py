@@ -40,28 +40,55 @@ def fixture_grids(lambdas, dixon_coles=False, rho=None):
     ]
 
 
+def pin_results(grids, results):
+    """Pin known real scores into precomputed fixture grids.
+
+    ``results`` is an iterable of {"md", "home", "away", "hg", "ag"}
+    dicts (the model bundle's ``results`` field). Matching fixtures are
+    replaced by a fixed score marker, so simulate_season plays them out
+    exactly as they happened and only samples the rest. Entries that
+    don't match a fixture are ignored.
+    """
+    fixed = {}
+    for r in results or []:
+        fixed[(r["md"], r["home"], r["away"])] = (int(r["hg"]), int(r["ag"]))
+    return [
+        (md, home, away, ("fixed",) + fixed[(md, home, away)])
+        if (md, home, away) in fixed else (md, home, away, cum)
+        for md, home, away, cum in grids
+    ]
+
+
 def simulate_season(grids, team_names, rng):
     """One full season from precomputed grids -> (LeagueTable, results).
 
-    results is a list of (matchday, home, away, hg, ag).
+    results is a list of (matchday, home, away, hg, ag). Grids entries
+    pinned by pin_results keep their real score instead of sampling.
     """
     table = LeagueTable(team_names)
     results = []
     for md, home, away, cum in grids:
-        hg, ag = models.sample_score(cum, rng)
+        if isinstance(cum, tuple) and cum[0] == "fixed":
+            hg, ag = cum[1], cum[2]
+        else:
+            hg, ag = models.sample_score(cum, rng)
         table.record(home, away, hg, ag)
         results.append((md, home, away, hg, ag))
     return table, results
 
 
-def _simulate_season_noisy(lambdas, team_names, rng, noise):
+def _simulate_season_noisy(lambdas, team_names, rng, noise, fixed=None):
     """One season with per-season strength perturbation (direct Poisson)."""
     factor_att = {t: math.exp(rng.gauss(0.0, noise)) for t in team_names}
     factor_def = {t: math.exp(rng.gauss(0.0, noise)) for t in team_names}
     table = LeagueTable(team_names)
-    for _md, home, away, lh, la in lambdas:
-        hg = models.poisson_sample(lh * factor_att[home] * factor_def[away], rng)
-        ag = models.poisson_sample(la * factor_att[away] * factor_def[home], rng)
+    for md, home, away, lh, la in lambdas:
+        real = fixed.get((md, home, away)) if fixed else None
+        if real is not None:
+            hg, ag = real
+        else:
+            hg = models.poisson_sample(lh * factor_att[home] * factor_def[away], rng)
+            ag = models.poisson_sample(la * factor_att[away] * factor_def[home], rng)
         table.record(home, away, hg, ag)
     return table
 
@@ -132,14 +159,16 @@ class Aggregate:
 
 
 def _worker(args):
-    (n_sims, seed, team_names, lambdas, dixon_coles, rho, noise) = args
+    (n_sims, seed, team_names, lambdas, dixon_coles, rho, noise, results) = args
     rng = random.Random(seed)
     agg = Aggregate(team_names)
     if noise > 0:
+        fixed = {(r["md"], r["home"], r["away"]): (int(r["hg"]), int(r["ag"]))
+                 for r in results or []}
         for _ in range(n_sims):
-            agg.add_season(_simulate_season_noisy(lambdas, team_names, rng, noise))
+            agg.add_season(_simulate_season_noisy(lambdas, team_names, rng, noise, fixed))
     else:
-        grids = fixture_grids(lambdas, dixon_coles, rho)
+        grids = pin_results(fixture_grids(lambdas, dixon_coles, rho), results)
         for _ in range(n_sims):
             table, _results = simulate_season(grids, team_names, rng)
             agg.add_season(table)
@@ -147,8 +176,13 @@ def _worker(args):
 
 
 def monte_carlo(model, matchdays, team_names, n_sims, seed=None,
-                dixon_coles=False, rho=None, noise=0.0, workers=None, progress=None):
-    """Run n_sims full seasons and return the merged Aggregate."""
+                dixon_coles=False, rho=None, noise=0.0, workers=None,
+                progress=None, results=None):
+    """Run n_sims full seasons and return the merged Aggregate.
+
+    ``results`` optionally pins played real scores (see pin_results), so
+    the run is conditioned on the season so far.
+    """
     lambdas = fixture_lambdas(model, matchdays)
     if seed is None:
         seed = random.randrange(2**63)
@@ -156,11 +190,13 @@ def monte_carlo(model, matchdays, team_names, n_sims, seed=None,
         workers = min(multiprocessing.cpu_count(), 8) if n_sims >= 4000 else 1
 
     if workers <= 1:
-        return _worker((n_sims, seed, team_names, lambdas, dixon_coles, rho, noise))
+        return _worker((n_sims, seed, team_names, lambdas, dixon_coles, rho,
+                        noise, results))
 
     base, extra = divmod(n_sims, workers)
     jobs = [
-        (base + (1 if w < extra else 0), seed + w, team_names, lambdas, dixon_coles, rho, noise)
+        (base + (1 if w < extra else 0), seed + w, team_names, lambdas,
+         dixon_coles, rho, noise, results)
         for w in range(workers)
         if base + (1 if w < extra else 0) > 0
     ]
