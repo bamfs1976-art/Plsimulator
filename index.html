@@ -303,6 +303,13 @@
         existence, from goals and xG alone. Closing odds only exist at kickoff; this model forecasts the whole season.</p>
     </section>
     <section class="block">
+      <p class="charttitle">Live track record — 2026/27, scored as it happens</p>
+      <p class="note" style="margin-bottom:10px">Every Monday the model publishes forecasts for the upcoming fixtures;
+        the following week they are scored against what actually happened (RPS and Brier, same metrics as the
+        backtest). No retro-fitting — each forecast is frozen before kickoff.</p>
+      <div id="acc-live-out"></div>
+    </section>
+    <section class="block">
       <p class="charttitle">What was tested and rejected</p>
       <p class="note">A promoted-club correction (attack ×0.59, defence ×1.57 measured over 28 promoted seasons) —
         rejected because the multi-season joint fit already prices promotion in. Long decay half-lives — rejected,
@@ -344,7 +351,9 @@ let ODDS_HISTORY = null;      // weekly odds snapshots, injected when known
 let TEAM_FORM = null;         // recent form per club (tools/build_form.py)
 let SEASON_STATE = null;      // season label / matchdays played / live flag
 let PLAYED_RESULTS = null;    // played 2026/27 results, pinned by the MC
+let LEDGER = null;            // live accuracy ledger (tools/weekly_update.py)
 const MAXG = 10, GRID = MAXG + 1, LN10 = Math.log(10);
+const BACKTEST_RPS = 0.2123, MARKET_RPS = 0.1994; // static benchmarks (Accuracy tab)
 /* Model constants: reassignable so model.json's bundle constants (including
    the DC_RHO fitted by maximum likelihood in plsim calibrate) override the
    fallbacks below via hydrateFromBundle / the embedded calibrated-data block. */
@@ -1268,6 +1277,37 @@ function renderScenario(names, posCounts, ptsSum, n) {
   markScrollables(document.getElementById("sc-out"));
 }
 
+/* ---------------- live accuracy ledger ---------------- */
+function renderLedger() {
+  const box = document.getElementById("acc-live-out");
+  if (!box) return;
+  if (!LEDGER || !LEDGER.length) {
+    box.innerHTML = '<p class="note">Collecting — the first entries appear after 2026/27 matches are played ' +
+      'and the following Monday update scores them. Check back once the season kicks off.</p>';
+    return;
+  }
+  const cum = LEDGER[LEDGER.length - 1].cumulative;
+  const vs = cum.rps <= BACKTEST_RPS ? "ahead of" : "behind";
+  let html = `<div class="metrics">
+    <div class="metric"><div class="k">Matches scored</div><div class="v">${cum.matches}</div></div>
+    <div class="metric"><div class="k">Rolling RPS</div><div class="v">${cum.rps.toFixed(4)}</div></div>
+    <div class="metric"><div class="k">Backtest benchmark</div><div class="v">${BACKTEST_RPS.toFixed(4)}</div></div>
+    <div class="metric"><div class="k">Market (closing odds)</div><div class="v">${MARKET_RPS.toFixed(4)}</div></div>
+  </div>
+  <p class="note" style="margin-bottom:10px">Rolling RPS is ${vs} the static 2025/26 backtest so far
+    (lower is better; early-season samples are small and swing a lot).</p>
+  <div class="scroll"><table><thead><tr><th class="t">Scored on</th><th>Matches</th>
+    <th>RPS</th><th>Brier</th><th>Rolling RPS</th></tr></thead><tbody>`;
+  LEDGER.slice(-12).reverse().forEach(e => {
+    html += `<tr><td class="t">${esc(e.date)}</td><td>${e.matches}</td>` +
+      `<td>${e.rps.toFixed(4)}</td><td>${e.brier.toFixed(4)}</td>` +
+      `<td>${e.cumulative.rps.toFixed(4)}</td></tr>`;
+  });
+  html += "</tbody></table></div>";
+  box.innerHTML = html;
+  markScrollables(box);
+}
+
 /* ---------------- tabs & init ---------------- */
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x.dataset.tab === tab));
@@ -1276,6 +1316,7 @@ function showTab(tab) {
   if (tab === "md") renderMatchday();
   if (tab === "scenario") scInit();
   if (tab === "form") formInit();
+  if (tab === "acc") renderLedger();
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 document.getElementById("ratings").onchange = renderTeams;
@@ -1296,6 +1337,7 @@ async function hydrateFromBundle() {
     if (m.form) TEAM_FORM = m.form;
     if (m.season_state) SEASON_STATE = m.season_state;
     if (Array.isArray(m.results)) PLAYED_RESULTS = m.results;
+    if (Array.isArray(m.ledger)) LEDGER = m.ledger;
   } catch (_) { /* offline: the embedded fallback stands */ }
 }
 function applyConstants(c) {
@@ -1442,6 +1484,10 @@ ODDS_HISTORY = [
   }
  }
 ];
+</script>
+<script id="ledger-data">
+/* Live accuracy ledger (tools/weekly_update.py) */
+LEDGER = null;
 </script>
 <script id="fixtures-data">
 /* Official 2026/27 fixture list (openfootball), embedded by

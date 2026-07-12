@@ -67,6 +67,17 @@ html, n = re.subn(r'<script id="history-data">.*?</script>', hist_block, html, f
 if n != 1:
     raise SystemExit("history-data block not found in index.html")
 
+ledger = "null"
+if os.path.exists("data/ledger.json"):
+    with open("data/ledger.json", encoding="utf-8") as fh:
+        ledger = json.dumps(json.load(fh))
+ledger_block = ('<script id="ledger-data">\n'
+                "/* Live accuracy ledger (tools/weekly_update.py) */\n"
+                f"LEDGER = {ledger};\n</script>")
+html, n = re.subn(r'<script id="ledger-data">.*?</script>', ledger_block, html, flags=re.S)
+if n != 1:
+    raise SystemExit("ledger-data block not found in index.html")
+
 with open("index.html", "w", encoding="utf-8") as fh:
     fh.write(html)
 print(f"embedded {len(ratings)} teams and "

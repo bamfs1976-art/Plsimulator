@@ -45,6 +45,10 @@ def build():
     if os.path.exists("data/history.json"):
         with open("data/history.json", encoding="utf-8") as fh:
             odds = json.load(fh)
+    ledger = None
+    if os.path.exists("data/ledger.json"):
+        with open("data/ledger.json", encoding="utf-8") as fh:
+            ledger = json.load(fh)
     return {
         "version": datetime.date.today().isoformat(),
         "constants": constants,
@@ -54,6 +58,7 @@ def build():
         "season_state": state,
         "odds_history": odds,
         "results": played_results(names),
+        "ledger": ledger,
         "meta": meta,
     }
 

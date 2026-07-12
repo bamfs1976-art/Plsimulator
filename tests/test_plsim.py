@@ -315,6 +315,49 @@ class FormTests(unittest.TestCase):
             self.assertLessEqual(w["ppg"], 3.0)
 
 
+class LedgerTests(unittest.TestCase):
+    FORECASTS = {
+        "date": "2026-08-17", "season": "2026-27", "model": "poisson+dc",
+        "fixtures": [
+            {"md": 1, "home": "Arsenal", "away": "Hull City",
+             "ph": 1.0, "pd": 0.0, "pa": 0.0},
+            {"md": 1, "home": "Everton", "away": "Fulham",
+             "ph": 1 / 3, "pd": 1 / 3, "pa": 1 / 3},
+            {"md": 2, "home": "Chelsea", "away": "Brighton",
+             "ph": 0.5, "pd": 0.3, "pa": 0.2},
+        ],
+    }
+
+    def test_scores_only_played_fixtures(self):
+        from tools.weekly_update import score_forecasts
+        played = [
+            {"md": 1, "home": "Arsenal", "away": "Hull City", "hg": 3, "ag": 0},
+            {"md": 1, "home": "Everton", "away": "Fulham", "hg": 2, "ag": 0},
+            # Chelsea v Brighton (MD2) not played yet -> not scored.
+        ]
+        n, rps_sum, brier_sum = score_forecasts(self.FORECASTS, played)
+        self.assertEqual(n, 2)
+        # Certain and correct -> RPS 0; uniform on a home win -> 5/18.
+        self.assertAlmostEqual(rps_sum, 0.0 + 5 / 18)
+        # Brier: perfect forecast 0; uniform 2/3.
+        self.assertAlmostEqual(brier_sum, 0.0 + 2 / 3)
+
+    def test_nothing_played_scores_nothing(self):
+        from tools.weekly_update import score_forecasts
+        n, rps_sum, brier_sum = score_forecasts(self.FORECASTS, [])
+        self.assertEqual((n, rps_sum, brier_sum), (0, 0.0, 0.0))
+
+    def test_draw_and_away_outcomes(self):
+        from tools.weekly_update import score_forecasts
+        from plsim.backtest import rps
+        played = [
+            {"md": 2, "home": "Chelsea", "away": "Brighton", "hg": 1, "ag": 1},
+        ]
+        n, rps_sum, _ = score_forecasts(self.FORECASTS, played)
+        self.assertEqual(n, 1)
+        self.assertAlmostEqual(rps_sum, rps((0.5, 0.3, 0.2), 1))
+
+
 class BundleTests(unittest.TestCase):
     def test_bundle_shape(self):
         import os

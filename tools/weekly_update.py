@@ -10,7 +10,11 @@ Behaviour:
   files don't exist yet (pre-season), it falls back to the previous
   triple, so the job never breaks across the season rollover.
 - Deletes the newest season's cached files so fresh results download.
+- Scores last week's forecasts (data/forecasts.json) against any newly
+  played results and appends the aggregates to data/ledger.json — the
+  live accuracy track record shown in the Accuracy tab.
 - Runs the calibration and rewrites teams_calibrated.json.
+- Writes fresh forecasts for the next unplayed matchdays.
 - Re-embeds the ratings into index.html (the deployed web app).
 
 Exits 0 whether or not anything changed; the workflow's git step
@@ -18,6 +22,7 @@ commits only when there is a diff.
 """
 
 import datetime
+import json
 import os
 import subprocess
 import sys
@@ -26,6 +31,10 @@ import urllib.error
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from plsim import calibrate as cal  # noqa: E402
+
+FORECAST_PATH = os.path.join("data", "forecasts.json")
+LEDGER_PATH = os.path.join("data", "ledger.json")
+FORECAST_MATCHDAYS = 2  # how many upcoming matchdays each run forecasts
 
 
 def season_string(year):
@@ -46,6 +55,108 @@ def refresh_newest(seasons, cache_dir="data"):
         if os.path.exists(path):
             os.remove(path)
             print(f"refreshing {path}")
+
+
+# ------------------------------------------------------- accuracy ledger
+
+def score_forecasts(forecasts, played):
+    """Score forecast fixtures that now have a real result.
+
+    ``forecasts`` is the dict written by write_forecasts; ``played`` a
+    list of {md, home, away, hg, ag}. Returns (n, rps_sum, brier_sum)
+    over the matched fixtures (n == 0 when nothing has been played yet).
+    """
+    from plsim.backtest import brier, rps
+
+    real = {(m["md"], m["home"], m["away"]): (m["hg"], m["ag"])
+            for m in played}
+    n, rps_sum, brier_sum = 0, 0.0, 0.0
+    for f in forecasts.get("fixtures", []):
+        score = real.get((f["md"], f["home"], f["away"]))
+        if score is None:
+            continue
+        hg, ag = score
+        outcome = 0 if hg > ag else 1 if hg == ag else 2
+        probs = (f["ph"], f["pd"], f["pa"])
+        rps_sum += rps(probs, outcome)
+        brier_sum += brier(probs, outcome)
+        n += 1
+    return n, rps_sum, brier_sum
+
+
+def update_ledger(today=None):
+    """Score last run's forecasts and append the result to the ledger."""
+    if not os.path.exists(FORECAST_PATH):
+        print("ledger: no previous forecasts to score")
+        return
+    from tools import build_form
+
+    with open(FORECAST_PATH, encoding="utf-8") as fh:
+        forecasts = json.load(fh)
+    season = forecasts.get("season")
+    played = build_form.played_matches(season) if season else []
+    n, rps_sum, brier_sum = score_forecasts(forecasts, played)
+    if not n:
+        print("ledger: forecast fixtures not played yet")
+        return
+    today = today or datetime.date.today().isoformat()
+    ledger = []
+    if os.path.exists(LEDGER_PATH):
+        with open(LEDGER_PATH, encoding="utf-8") as fh:
+            ledger = json.load(fh)
+    ledger = [e for e in ledger if e["date"] != today]  # idempotent reruns
+    total_n = sum(e["matches"] for e in ledger) + n
+    total_rps = sum(e["rps"] * e["matches"] for e in ledger) + rps_sum
+    total_brier = sum(e["brier"] * e["matches"] for e in ledger) + brier_sum
+    ledger.append({
+        "date": today, "matches": n,
+        "rps": round(rps_sum / n, 4), "brier": round(brier_sum / n, 4),
+        "cumulative": {"matches": total_n,
+                       "rps": round(total_rps / total_n, 4),
+                       "brier": round(total_brier / total_n, 4)},
+    })
+    with open(LEDGER_PATH, "w", encoding="utf-8") as fh:
+        json.dump(ledger, fh, indent=1)
+        fh.write("\n")
+    print(f"ledger: scored {n} matches (RPS {rps_sum / n:.4f}), "
+          f"{total_n} cumulative")
+
+
+def write_forecasts(ratings, info, today=None):
+    """Forecast the next unplayed matchdays with the freshly fitted model."""
+    from plsim import models
+    from plsim.fixtures import get_fixtures
+    from tools import build_form
+    from tools.build_bundle import FIXTURE_SEASON
+
+    teams = {k: v for k, v in ratings.items() if k != "_meta"}
+    model = models.make_model("poisson", teams)
+    matchdays, _dates, _src = get_fixtures(list(teams))
+    played = {(m["md"], m["home"], m["away"])
+              for m in build_form.played_matches(FIXTURE_SEASON)}
+    rho = info.get("rho")
+    fixtures, mds_used = [], []
+    for md, pairs in enumerate(matchdays, start=1):
+        todo = [(h, a) for h, a in pairs if (md, h, a) not in played]
+        if not todo:
+            continue
+        if len(mds_used) >= FORECAST_MATCHDAYS:
+            break
+        mds_used.append(md)
+        for h, a in todo:
+            lam_h, lam_a = model.lambdas(h, a)
+            grid = models.score_grid(lam_h, lam_a, True, rho)
+            p_h, p_d, p_a = models.outcome_probs(grid)
+            fixtures.append({"md": md, "home": h, "away": a,
+                             "ph": round(p_h, 4), "pd": round(p_d, 4),
+                             "pa": round(p_a, 4)})
+    data = {"date": today or datetime.date.today().isoformat(),
+            "season": FIXTURE_SEASON, "model": "poisson+dc",
+            "fixtures": fixtures}
+    with open(FORECAST_PATH, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=1)
+        fh.write("\n")
+    print(f"forecasts: {len(fixtures)} fixtures over matchdays {mds_used}")
 
 
 def main():
@@ -69,10 +180,23 @@ def main():
     except Exception as exc:  # noqa: BLE001
         print(f"xG refresh skipped: {exc}")
 
+    # Score last week's forecasts against results that have landed since
+    # (best effort - the ledger must never break the refit).
+    try:
+        update_ledger()
+    except Exception as exc:  # noqa: BLE001
+        print(f"ledger update skipped: {exc}")
+
     print(f"calibrating on: {', '.join(seasons)}")
     ratings, info = cal.calibrate(seasons=seasons)
     cal.write_ratings(ratings, "teams_calibrated.json", info)
     print(f"fitted {info['matches']} matches, rho {info['rho']:+.3f}")
+
+    # Forecast the next matchdays with the fresh fit; scored next run.
+    try:
+        write_forecasts(ratings, info)
+    except Exception as exc:  # noqa: BLE001
+        print(f"forecast write skipped: {exc}")
 
     subprocess.run([sys.executable, "tools/snapshot_history.py"], check=True)
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
