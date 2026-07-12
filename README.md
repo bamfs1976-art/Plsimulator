@@ -202,6 +202,31 @@ match data instead of the hand-set defaults:
 The output (`teams_calibrated.json`) plugs straight into any command via
 `--teams`, and into the dashboard via its sidebar checkbox.
 
+## The shared model bundle (model.json)
+
+`python3 tools/build_bundle.py` assembles `model.json`, one machine-readable
+bundle served CORS-open at `https://plsimulation.netlify.app/model.json` and
+refreshed weekly by `tools/weekly_update.py`. The browser simulator, Gameweek
+Edge and the [Bookings Desk](https://github.com/bamfs1976-art/pl-bookings)
+all consume it, so ratings, fixtures and season state never drift between
+products. It carries:
+
+- `constants` + `teams` + `meta.rho` — everything needed to reproduce the
+  deployed model's numbers exactly
+- `fixtures` — the official 38-matchday calendar, plus `fixture_dates`
+  (matchday → ISO date of its first fixture)
+- `form` and `season_state` — recent results and where the season stands
+- `stakes` — per-club title/top-4/top-6/relegation probabilities, mean
+  position and mean points from a seeded 20,000-season Monte Carlo run
+  (reproducible: seed and settings travel in the block)
+- `referees` — the week's match-official appointments, when known
+
+Referee appointments have no stable public feed, so
+`tools/build_refs.py` structures a hand-collected list instead of scraping:
+feed it a `home,away,referee` CSV (club names are forgiving, matchdays are
+inferred from the fixture list) and it maintains `data/referees.json`, which
+the next bundle build folds in. Assignments accrete across the season.
+
 ## Web dashboard
 
 `streamlit run dashboard.py` (after `pip install streamlit`) opens an
