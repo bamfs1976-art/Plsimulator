@@ -10,6 +10,12 @@
 <meta property="og:description" content="10,000 simulated seasons of the real fixture list — recalibrated weekly. Backtested against the betting market.">
 <meta property="og:url" content="https://plsimulation.netlify.app/">
 <meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#2a78d6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PL Simulator">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -1374,6 +1380,12 @@ window.addEventListener("DOMContentLoaded", () => {
   hydrateFromBundle().finally(() =>
     setTimeout(() => document.getElementById("run-mc").click(), 30));
 });
+
+/* PWA: sw.js keeps the shell and the last model.json available offline. */
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  window.addEventListener("load", () =>
+    navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
 
 /* Scroll-fade cue on any horizontally clipped table. */
 function markScrollables(root) {
