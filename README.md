@@ -202,6 +202,12 @@ match data instead of the hand-set defaults:
 The output (`teams_calibrated.json`) plugs straight into any command via
 `--teams`, and into the dashboard via its sidebar checkbox.
 
+Note on provenance: the committed `teams_calibrated.json` is rewritten
+every Monday by the weekly recalibration job, so its `_meta` block
+(seasons, match count) reflects the job's rolling three-season window at
+that date — not the 2023–26 default fit described above. The `_meta.note`
+field says the same thing in-file.
+
 ## Web dashboard
 
 `streamlit run dashboard.py` (after `pip install streamlit`) opens an

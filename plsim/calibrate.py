@@ -513,6 +513,9 @@ def write_ratings(ratings, path, info=None):
             "seasons": info["seasons"],
             "matches": info["matches"],
             "half_life_days": info["half_life_days"],
+            "note": "Written by the weekly recalibration job "
+                    "(tools/weekly_update.py); seasons/matches reflect its "
+                    "rolling window, not the README's default 2023-26 fit.",
         }
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=2)
