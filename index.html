@@ -198,6 +198,9 @@
   #mc-standings th[aria-sort="ascending"], #mc-standings th[aria-sort="descending"] { color: var(--accent); }
   #mc-standings th.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
   #mc-standings th .arrow { font-size: 10px; margin-left: 3px; }
+  .club-link { color: inherit; text-decoration: none; }
+  @media (hover: hover) { .club-link:hover { color: var(--accent); text-decoration: underline; } }
+  .club-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .delta-up { color: var(--series-2); font-weight: 600; }
   .delta-dn { color: var(--danger); font-weight: 600; }
   .delta-0 { color: var(--text-3); }
@@ -472,6 +475,10 @@ function clubDot(t) {
   const c = CLUB_COLOR[t];
   return c ? `<span class="dot" style="background:${c}"></span>` : "";
 }
+/* URL slug for a club's own route (/clubs/<slug>/) — must match
+   tools/build_clubs.py's slugify(). */
+function clubSlug(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); }
+function clubLink(t) { return `<a class="club-link" href="clubs/${clubSlug(t)}/">${esc(t)}</a>`; }
 
 function getFav() { try { return localStorage.getItem("plsim-fav") || ""; } catch (_) { return ""; } }
 function setFav(t) {
@@ -989,7 +996,7 @@ function renderStandings() {
   /* Rows */
   let rows = "";
   order.forEach((t, i) => {
-    let cells = `<td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>`;
+    let cells = `<td>${i + 1}</td><td class="t">${clubDot(t)}${clubLink(t)}</td>`;
     MC_COLS.forEach(c => {
       const v = c.get(M, t);
       /* Rel% bar is only alarming above the 15% survival-worry threshold;
@@ -1006,7 +1013,7 @@ function renderStandings() {
   let cards = "";
   order.forEach((t, i) => {
     cards += `<div class="mc-card clickable" data-team="${esc(t)}" role="button" tabindex="0">` +
-      `<div class="mc-card-head"><span class="rank">${i + 1}</span>${clubDot(t)}${esc(t)}</div>` +
+      `<div class="mc-card-head"><span class="rank">${i + 1}</span>${clubDot(t)}${clubLink(t)}</div>` +
       `<div class="mc-card-stats">` +
       `<div><span class="cs-k">Title</span><span class="cs-v">${M.title(t).toFixed(1)}%</span></div>` +
       `<div><span class="cs-k">Top 4</span><span class="cs-v">${M.top4(t).toFixed(0)}%</span></div>` +
@@ -1022,6 +1029,10 @@ function renderStandings() {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTeam(card.dataset.team); }
     });
   });
+  /* Club-name links navigate to the club route rather than opening the
+     in-app drill-down; stop the click from also triggering the row/card. */
+  box.querySelectorAll(".club-link").forEach(a =>
+    a.addEventListener("click", e => e.stopPropagation()));
   /* Row click → drill-down; hover/focus → distribution popover */
   box.querySelectorAll("tr.clickable").forEach(tr => {
     tr.addEventListener("click", () => openTeam(tr.dataset.team));
