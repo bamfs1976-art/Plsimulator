@@ -179,6 +179,30 @@
     .c-opt { display: none; }
     h1 { font-size: 21px; }
   }
+  /* Sortable, sticky standings header (Season odds) */
+  .mc-scroll { max-height: 70vh; overflow: auto; }
+  #mc-standings thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--surface);
+    box-shadow: inset 0 -1px 0 var(--border);
+  }
+  #mc-standings th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  @media (hover: hover) { #mc-standings th.sortable:hover { color: var(--text-1); } }
+  #mc-standings th[aria-sort="ascending"], #mc-standings th[aria-sort="descending"] { color: var(--accent); }
+  #mc-standings th.sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+  #mc-standings th .arrow { font-size: 10px; margin-left: 3px; }
+  .delta-up { color: var(--series-2); font-weight: 600; }
+  .delta-dn { color: var(--danger); font-weight: 600; }
+  .delta-0 { color: var(--text-3); }
+  /* Finishing-distribution popover on row hover/focus */
+  .dist-pop {
+    position: fixed; z-index: 60; background: var(--surface); color: var(--text-1);
+    border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.22); pointer-events: none; width: 250px;
+  }
+  .dist-pop[hidden] { display: none; }
+  .dist-pop .charttitle { margin: 0 0 6px; font-size: 12px; }
+  .dist-pop .note { font-size: 11px; }
 </style>
 </head>
 <body>
@@ -790,18 +814,14 @@ function renderMC(names, posCounts, ptsSum, n, pinned) {
   </div>`;
   renderMovers(order, pct);
 
-  let html = `<div class="scroll"><table><thead><tr>
-    <th>#</th><th class="t">Team</th><th>Title %</th><th>Top 4 %</th><th class="c-opt">Europe %</th>
-    <th>Rel %</th><th class="c-opt">Avg pos</th><th class="c-opt">Avg pts</th></tr></thead><tbody>`;
-  order.forEach((t, i) => {
-    html += `<tr class="clickable" data-team="${esc(t)}"><td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>` +
-      `<td style="${bar(pct(t, 1, 1), 100, 'var(--series-1)')}">${pct(t, 1, 1).toFixed(2)}</td>` +
-      `<td style="${bar(pct(t, 1, 4), 100, 'var(--series-1)')}">${pct(t, 1, 4).toFixed(2)}</td>` +
-      `<td class="c-opt">${pct(t, 1, 7).toFixed(2)}</td>` +
-      `<td style="${bar(pct(t, 18, 20), 100, 'var(--danger)')}">${pct(t, 18, 20).toFixed(2)}</td>` +
-      `<td class="c-opt">${avgPos(t).toFixed(2)}</td><td class="c-opt">${(ptsSum[t] / n).toFixed(1)}</td></tr>`;
-  });
-  html += "</tbody></table></div>" +
+  /* The standings table is rendered by renderStandings(), which owns sort
+     state, the sticky header, the hover distribution popover and the
+     Δ-vs-last-run column. Snapshot the outgoing run first so re-runs can diff. */
+  MC_PREV = MC_CURR ? MC_CURR.snap : null;
+  const M = mcMetrics(names, posCounts, ptsSum, n);
+  MC_CURR = { M, defaultOrder: order, snap: snapMetrics(M) };
+
+  let html = `<div id="mc-standings"></div>` +
     `<p class="note" style="margin-top:8px">${pinned
       ? `Conditioned on the season so far: the ${pinned} played result${pinned === 1 ? "" : "s"} are locked in and only the remaining ${380 - pinned} fixtures are simulated. `
       : ""}Europe % = a top-7 finish (UCL top 5, Europa 6th, Conference 7th — before domestic-cup routes). Tap any club for its full outlook: European breakdown, position odds, points range and fixture forecast.</p>`;
@@ -833,11 +853,163 @@ function renderMC(names, posCounts, ptsSum, n, pinned) {
   html += raceChart();
   html += `<section class="block">${heatmap(order, posPct, "Finishing position distribution")}</section>`;
   document.getElementById("mc-out").innerHTML = html;
-  document.querySelectorAll("#mc-out tr.clickable").forEach(tr =>
-    tr.addEventListener("click", () => openTeam(tr.dataset.team)));
+  renderStandings();
+  document.querySelectorAll("#mc-out tr.clickable").forEach(tr => {
+    if (tr.closest("#mc-standings")) return;   // standings rows bound in renderStandings
+    tr.addEventListener("click", () => openTeam(tr.dataset.team));
+  });
   markScrollables(document.getElementById("mc-out"));
   saveSnapshot(order, pct);
 }
+
+/* ---------------- sortable standings table ------------------------- */
+/* Column model: key, header label, formatter, bar hue, and sort direction.
+   `better` records which way is good for a club, so Δ-vs-last-run and any
+   future colour cues read the right sign. `opt` mirrors the .c-opt columns
+   that collapse on narrow viewports. */
+const MC_COLS = [
+  { key: "title",  label: "Title %", get: (M, t) => M.title(t),  fmt: v => v.toFixed(2), bar: "var(--series-1)", better: "high", defDir: "desc" },
+  { key: "top4",   label: "Top 4 %", get: (M, t) => M.top4(t),   fmt: v => v.toFixed(2), bar: "var(--series-1)", better: "high", defDir: "desc" },
+  { key: "europe", label: "Europe %", get: (M, t) => M.europe(t), fmt: v => v.toFixed(2), opt: true, better: "high", defDir: "desc" },
+  { key: "rel",    label: "Rel %",   get: (M, t) => M.rel(t),    fmt: v => v.toFixed(2), bar: "var(--danger)", better: "low", defDir: "desc" },
+  { key: "avgpos", label: "Avg pos", get: (M, t) => M.avgpos(t), fmt: v => v.toFixed(2), opt: true, better: "low", defDir: "asc" },
+  { key: "avgpts", label: "Avg pts", get: (M, t) => M.avgpts(t), fmt: v => v.toFixed(1), opt: true, better: "high", defDir: "desc" },
+];
+let MC_CURR = null, MC_PREV = null;
+let mcSort = { key: "title", dir: "desc" };   // persists across runs and views
+function mcMetrics(names, posCounts, ptsSum, n) {
+  const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
+  const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
+  return {
+    names, n, posCounts,
+    title: t => pct(t, 1, 1), top4: t => pct(t, 1, 4), europe: t => pct(t, 1, 7),
+    rel: t => pct(t, 18, 20), avgpos: avgPos, avgpts: t => ptsSum[t] / n,
+  };
+}
+function snapMetrics(M) {
+  const o = {};
+  M.names.forEach(t => o[t] = { title: M.title(t), top4: M.top4(t), europe: M.europe(t),
+    rel: M.rel(t), avgpos: M.avgpos(t), avgpts: M.avgpts(t) });
+  return o;
+}
+function sortedStanding() {
+  const M = MC_CURR.M, col = MC_COLS.find(c => c.key === mcSort.key) || MC_COLS[0];
+  const sign = mcSort.dir === "asc" ? 1 : -1;
+  return [...M.names].sort((a, b) =>
+    sign * (col.get(M, a) - col.get(M, b)) || M.avgpos(a) - M.avgpos(b) || a.localeCompare(b));
+}
+function deltaCell(col, t) {
+  if (!MC_PREV || !MC_PREV[t]) return "";
+  const d = col.get(MC_CURR.M, t) - MC_PREV[t][col.key];
+  const eps = col.key === "avgpts" ? 0.05 : col.key === "avgpos" ? 0.02 : 0.05;
+  if (Math.abs(d) < eps) return `<span class="delta-0">·</span>`;
+  const good = col.better === "low" ? d < 0 : d > 0;
+  const arrow = d > 0 ? "▲" : "▼";
+  const val = Math.abs(d) >= 10 ? Math.abs(d).toFixed(0) : Math.abs(d).toFixed(2).replace(/0$/, "");
+  return `<span class="${good ? "delta-up" : "delta-dn"}">${arrow}${val}</span>`;
+}
+function renderStandings() {
+  const box = document.getElementById("mc-standings");
+  if (!box || !MC_CURR) return;
+  const M = MC_CURR.M, order = sortedStanding();
+  const activeCol = MC_COLS.find(c => c.key === mcSort.key) || MC_COLS[0];
+  const showDelta = !!MC_PREV;
+  const arrow = mcSort.dir === "asc" ? "▲" : "▼";
+  /* Header */
+  let head = `<th scope="col">#</th><th scope="col" class="t sortable" data-key="team" tabindex="0"` +
+    ` role="button" aria-sort="${mcSort.key === "team" ? (mcSort.dir === "asc" ? "ascending" : "descending") : "none"}">` +
+    `Team${mcSort.key === "team" ? `<span class="arrow" aria-hidden="true">${arrow}</span>` : ""}</th>`;
+  MC_COLS.forEach(c => {
+    const on = mcSort.key === c.key;
+    head += `<th scope="col" class="sortable${c.opt ? " c-opt" : ""}" data-key="${c.key}" tabindex="0" role="button"` +
+      ` aria-sort="${on ? (mcSort.dir === "asc" ? "ascending" : "descending") : "none"}">` +
+      `${c.label}${on ? `<span class="arrow" aria-hidden="true">${arrow}</span>` : ""}</th>`;
+  });
+  if (showDelta) head += `<th scope="col" title="Change in ${activeCol.label.trim()} vs your previous run">Δ ${esc(activeCol.label.replace(/ %$/, "").trim())}</th>`;
+  /* Rows */
+  let rows = "";
+  order.forEach((t, i) => {
+    let cells = `<td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>`;
+    MC_COLS.forEach(c => {
+      const v = c.get(M, t);
+      const style = c.bar ? ` style="${bar(v, 100, c.bar)}"` : "";
+      cells += `<td class="${c.opt ? "c-opt" : ""}"${style}>${c.fmt(v)}</td>`;
+    });
+    if (showDelta) cells += `<td>${deltaCell(activeCol, t)}</td>`;
+    rows += `<tr class="clickable" data-team="${esc(t)}">${cells}</tr>`;
+  });
+  box.innerHTML = `<div class="scroll mc-scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  /* Row click → drill-down; hover/focus → distribution popover */
+  box.querySelectorAll("tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => openTeam(tr.dataset.team));
+    tr.addEventListener("mouseenter", e => showDistPop(tr.dataset.team, e));
+    tr.addEventListener("mousemove", e => positionDistPop(e));
+    tr.addEventListener("mouseleave", hideDistPop);
+    tr.tabIndex = 0;
+    tr.addEventListener("focus", () => showDistPop(tr.dataset.team, tr));
+    tr.addEventListener("blur", hideDistPop);
+    tr.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTeam(tr.dataset.team); }
+    });
+  });
+  /* Header sort → click + keyboard */
+  box.querySelectorAll("th.sortable").forEach(th => {
+    const act = () => sortStandings(th.dataset.key);
+    th.addEventListener("click", act);
+    th.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); }
+    });
+  });
+  markScrollables(box);
+}
+function sortStandings(key) {
+  const col = MC_COLS.find(c => c.key === key);
+  if (mcSort.key === key) mcSort.dir = mcSort.dir === "asc" ? "desc" : "asc";
+  else mcSort = { key, dir: col ? col.defDir : (key === "team" ? "asc" : "desc") };
+  renderStandings();
+}
+/* Distribution popover: a mini finishing-position histogram from the current
+   run, reusing the same SVG-bar idiom as the club drill-down. */
+let distPopEl = null;
+function distPop() {
+  if (!distPopEl) {
+    distPopEl = document.createElement("div");
+    distPopEl.className = "dist-pop"; distPopEl.setAttribute("role", "tooltip");
+    distPopEl.hidden = true;
+    document.body.appendChild(distPopEl);
+  }
+  return distPopEl;
+}
+function showDistPop(team, evtOrEl) {
+  if (!MC_CURR || !MC_CURR.M.posCounts[team]) return;
+  const M = MC_CURR.M, counts = M.posCounts[team], n = M.n;
+  const maxC = Math.max(...counts, 1);
+  const W = 226, w = W / 20;
+  const bars = counts.map((c, i) =>
+    `<rect x="${(i * w).toFixed(1)}" y="${(56 - 52 * c / maxC).toFixed(1)}" width="${(w - 1.5).toFixed(1)}" height="${(52 * c / maxC).toFixed(1)}" rx="1.5"` +
+    ` fill="var(--series-1)" fill-opacity="${(0.3 + 0.7 * c / maxC).toFixed(2)}"><title>P${i + 1}: ${(100 * c / n).toFixed(1)}%</title></rect>`).join("");
+  const el = distPop();
+  el.innerHTML = `<p class="charttitle">${clubDot(team)}${esc(team)} — finishing positions</p>` +
+    `<svg viewBox="0 0 ${W} 64" style="width:100%;height:auto" role="img" aria-label="${esc(team)} finishing-position distribution">${bars}` +
+    `<text x="0" y="63" class="axis">1st</text><text x="${W}" y="63" text-anchor="end" class="axis">20th</text></svg>` +
+    `<p class="note">Title ${M.title(team).toFixed(1)}% · Top 4 ${M.top4(team).toFixed(0)}% · Rel ${M.rel(team).toFixed(0)}%</p>`;
+  el.hidden = false;
+  positionDistPop(evtOrEl);
+}
+function positionDistPop(evtOrEl) {
+  const el = distPop();
+  if (el.hidden) return;
+  let x, y;
+  if (evtOrEl && typeof evtOrEl.clientX === "number") { x = evtOrEl.clientX + 16; y = evtOrEl.clientY + 14; }
+  else if (evtOrEl && evtOrEl.getBoundingClientRect) {
+    const r = evtOrEl.getBoundingClientRect(); x = r.right + 12; y = r.top;
+  } else return;
+  const rect = el.getBoundingClientRect();
+  x = Math.min(x, window.innerWidth - rect.width - 10);
+  y = Math.min(Math.max(8, y), window.innerHeight - rect.height - 10);
+  el.style.left = x + "px"; el.style.top = y + "px";
+}
+function hideDistPop() { if (distPopEl) distPopEl.hidden = true; }
 
 /* ---------------- odds movement since the model last changed ------- */
 function ratingsHash() {
