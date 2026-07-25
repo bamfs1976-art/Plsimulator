@@ -226,6 +226,16 @@ def main():
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
     subprocess.run([sys.executable, "tools/build_form.py"], check=True)
     subprocess.run([sys.executable, "tools/build_bundle.py"], check=True)
+
+    # Regenerate the SEO surfaces from the fresh bundle: the per-club
+    # routes and the sitemap (best effort - a static-page glitch must
+    # never break the weekly refit). The Open Graph image needs a
+    # headless browser, so it is regenerated out of band, not here.
+    for step in (["tools/build_clubs.py"], ["tools/build_sitemap.py"]):
+        try:
+            subprocess.run([sys.executable, *step], check=True, timeout=600)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{step[0]} skipped: {exc}")
     print("done")
 
 
