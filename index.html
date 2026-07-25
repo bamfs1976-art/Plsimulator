@@ -203,6 +203,27 @@
   .dist-pop[hidden] { display: none; }
   .dist-pop .charttitle { margin: 0 0 6px; font-size: 12px; }
   .dist-pop .note { font-size: 11px; }
+  /* Compact club cards — the standings below the md breakpoint */
+  .mc-cards { display: none; }
+  .mc-card {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; font: inherit; color: inherit;
+  }
+  .mc-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mc-card .mc-card-head { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
+  .mc-card .rank { color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 20px; }
+  .mc-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mc-card-stats > div {
+    background: var(--surface-2); border-radius: 8px; padding: 6px 8px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .mc-card-stats .cs-k { font-size: 11px; color: var(--text-2); }
+  .mc-card-stats .cs-v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  @media (max-width: 720px) {
+    #mc-standings .mc-scroll { display: none; }
+    #mc-standings .mc-cards { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -938,7 +959,27 @@ function renderStandings() {
     if (showDelta) cells += `<td>${deltaCell(activeCol, t)}</td>`;
     rows += `<tr class="clickable" data-team="${esc(t)}">${cells}</tr>`;
   });
-  box.innerHTML = `<div class="scroll mc-scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  /* Compact cards for the same, shared sort order (shown below the md
+     breakpoint; the full table takes over at md and up). */
+  let cards = "";
+  order.forEach((t, i) => {
+    cards += `<div class="mc-card clickable" data-team="${esc(t)}" role="button" tabindex="0">` +
+      `<div class="mc-card-head"><span class="rank">${i + 1}</span>${clubDot(t)}${esc(t)}</div>` +
+      `<div class="mc-card-stats">` +
+      `<div><span class="cs-k">Title</span><span class="cs-v">${M.title(t).toFixed(1)}%</span></div>` +
+      `<div><span class="cs-k">Top 4</span><span class="cs-v">${M.top4(t).toFixed(0)}%</span></div>` +
+      `<div class="cs-rel"><span class="cs-k">Rel</span><span class="cs-v">${M.rel(t).toFixed(0)}%</span></div>` +
+      `</div></div>`;
+  });
+  box.innerHTML = `<div class="scroll mc-scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>` +
+    `<div class="mc-cards">${cards}</div>`;
+  /* Card interactions mirror the table rows. */
+  box.querySelectorAll(".mc-card").forEach(card => {
+    card.addEventListener("click", () => openTeam(card.dataset.team));
+    card.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTeam(card.dataset.team); }
+    });
+  });
   /* Row click → drill-down; hover/focus → distribution popover */
   box.querySelectorAll("tr.clickable").forEach(tr => {
     tr.addEventListener("click", () => openTeam(tr.dataset.team));
