@@ -141,15 +141,17 @@
   .hero {
     display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 18px;
   }
-  .hero { background: var(--grad); border-radius: 14px; padding: 12px; box-shadow: var(--grad-glow); }
+  /* A dark overlay over the gradient lifts white text to WCAG AA even on
+     the gradient's lightest (mid-blue) band. */
+  .hero { background: linear-gradient(rgba(0,0,0,.24), rgba(0,0,0,.24)), var(--grad); border-radius: 14px; padding: 12px; box-shadow: var(--grad-glow); }
   .hero .stat {
-    flex: 1 1 150px; background: rgba(255,255,255,.13); border-radius: 10px;
-    border: 1px solid rgba(255,255,255,.18);
+    flex: 1 1 150px; background: rgba(255,255,255,.10); border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.22);
     padding: 12px 14px; min-width: 0;
   }
-  .hero .k { font-size: 11px; color: rgba(255,255,255,.78); letter-spacing: .07em; text-transform: uppercase; font-weight: 700; }
+  .hero .k { font-size: 11px; color: rgba(255,255,255,.92); letter-spacing: .07em; text-transform: uppercase; font-weight: 700; }
   .hero .v { font-size: 22px; font-weight: 800; line-height: 1.2; color: #fff; }
-  .hero .s { font-size: 12px; color: rgba(255,255,255,.75); }
+  .hero .s { font-size: 12px; color: rgba(255,255,255,.92); }
   .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .brand .mark {
     width: 34px; height: 34px; border-radius: 9px; background: var(--grad);
