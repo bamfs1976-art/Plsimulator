@@ -203,6 +203,17 @@
   .dist-pop[hidden] { display: none; }
   .dist-pop .charttitle { margin: 0 0 6px; font-size: 12px; }
   .dist-pop .note { font-size: 11px; }
+  /* Toast (share link copied, etc.) */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px;
+    transform: translateX(-50%) translateY(12px);
+    background: var(--text-1); color: var(--surface);
+    padding: 10px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 30px rgba(0,0,0,.28);
+    opacity: 0; pointer-events: none; z-index: 200;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   /* Compact club cards — the standings below the md breakpoint */
   .mc-cards { display: none; }
   .mc-card {
@@ -1193,52 +1204,75 @@ function openTeam(team) {
   dlg.showModal();
 }
 
-/* ---------------- share card --------------------------------------- */
-document.getElementById("share-mc").onclick = async () => {
-  const mc = window.LAST_MC;
-  if (!mc) return;
-  const { posCounts, n } = mc;
-  const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
-  const names = Object.keys(posCounts);
-  const title = [...names].sort((a, b) => pct(b, 1, 1) - pct(a, 1, 1)).slice(0, 5);
-  const rel = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20)).slice(0, 3);
-  const c = document.createElement("canvas");
-  c.width = 1000; c.height = 1000;
-  const x = c.getContext("2d");
-  x.fillStyle = "#14171c"; x.fillRect(0, 0, 1000, 1000);
-  x.fillStyle = "#fff"; x.font = "700 44px system-ui";
-  x.fillText("Premier League 2026/27", 60, 96);
-  x.fillStyle = "#9aa3ad"; x.font = "400 26px system-ui";
-  x.fillText(`${n.toLocaleString()} simulated seasons · ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`, 60, 140);
-  x.fillStyle = "#fff"; x.font = "600 30px system-ui";
-  x.fillText("Title race", 60, 220);
-  title.forEach((t, i) => {
-    const y = 260 + i * 78, p = pct(t, 1, 1);
-    x.fillStyle = "#2f81e0"; x.globalAlpha = 0.85;
-    x.beginPath(); x.roundRect(60, y, 8.4 * Math.max(p, 1.4), 46, 8); x.fill();
-    x.globalAlpha = 1; x.fillStyle = "#fff"; x.font = "600 28px system-ui";
-    x.fillText(`${t}  ${p.toFixed(0)}%`, 76, y + 32);
-  });
-  x.fillStyle = "#fff"; x.font = "600 30px system-ui";
-  x.fillText("Relegation risk", 60, 700);
-  rel.forEach((t, i) => {
-    const y = 740 + i * 66, p = pct(t, 18, 20);
-    x.fillStyle = "#e05a55"; x.globalAlpha = 0.85;
-    x.beginPath(); x.roundRect(60, y, 8.4 * Math.max(p, 1.4), 40, 8); x.fill();
-    x.globalAlpha = 1; x.fillStyle = "#fff"; x.font = "600 26px system-ui";
-    x.fillText(`${t}  ${p.toFixed(0)}%`, 76, y + 29);
-  });
-  x.fillStyle = "#9aa3ad"; x.font = "400 24px system-ui";
-  x.fillText("plsimulation.netlify.app — backtested vs Pinnacle closing odds", 60, 962);
-  c.toBlob(async blob => {
-    const file = new File([blob], "pl-2026-27-odds.png", { type: "image/png" });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "PL 2026/27 odds" }); return; } catch (_) {}
+/* ---------------- reproducible share link -------------------------- */
+/* The Share button builds a permalink that captures every knob that
+   changes the numbers — seed, seasons, model, Dixon-Coles, ratings source
+   — in URL search params (not the hash, so it survives copy/paste and is
+   crawlable). On load these params hydrate the controls and the auto-run
+   reproduces the exact standings the sharer saw. */
+const SHARE_KEYS = ["seed", "seasons", "model", "dc", "ratings"];
+function shareParams() {
+  const p = new URLSearchParams();
+  p.set("seed", String(ui().seed));
+  p.set("seasons", document.getElementById("sims").value);
+  p.set("model", document.getElementById("model").value);
+  p.set("dc", document.getElementById("dc").checked ? "1" : "0");
+  p.set("ratings", document.getElementById("ratings").value);
+  return p;
+}
+function buildShareURL() {
+  return location.origin + location.pathname + "?" + shareParams().toString() + location.hash;
+}
+let toastTimer = null;
+function toast(msg) {
+  let el = document.getElementById("toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "toast"; el.className = "toast"; el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text); return true;
     }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-  });
+  } catch (_) { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (_) { return false; }
+}
+document.getElementById("share-mc").onclick = async () => {
+  const url = buildShareURL();
+  /* Reflect the settings in the address bar so a manual copy also works. */
+  history.replaceState(null, "", "?" + shareParams().toString() + location.hash);
+  toast(await copyText(url) ? "Copied!" : "Copy failed — link is in the address bar");
 };
+function hydrateFromParams() {
+  const q = new URLSearchParams(location.search);
+  if (!SHARE_KEYS.some(k => q.has(k))) return false;
+  const setOption = (id, val, allowed) => {
+    if (val == null) return;
+    const el = document.getElementById(id);
+    if ((!allowed || allowed.includes(val)) && [...el.options].some(o => o.value === val)) el.value = val;
+  };
+  if (q.has("seed")) { const s = parseInt(q.get("seed"), 10); if (Number.isFinite(s)) document.getElementById("seed").value = s >>> 0; }
+  if (q.has("seasons")) setOption("sims", q.get("seasons"));
+  if (q.has("model")) setOption("model", q.get("model"), ["poisson", "elo"]);
+  if (q.has("dc")) document.getElementById("dc").checked = q.get("dc") === "1" || q.get("dc") === "true";
+  if (q.has("ratings")) setOption("ratings", q.get("ratings"), ["calibrated", "default"]);
+  return true;
+}
 
 /* ---------------- Matchday ---------------- */
 function renderMatchday() {
@@ -1691,6 +1725,7 @@ function applyConstants(c) {
 }
 /* Auto-run: the visitor should see the answer, not a button. */
 window.addEventListener("DOMContentLoaded", () => {
+  hydrateFromParams();   // shared-link settings hydrate the controls before the run
   restoreFromHash();
   hydrateFromBundle().finally(() =>
     setTimeout(() => document.getElementById("run-mc").click(), 30));
