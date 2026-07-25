@@ -138,6 +138,14 @@
   }
   details.settings > summary::before { content: "⚙ "; }
   details.settings[open] > summary { color: var(--accent); }
+  .settings-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 8px; vertical-align: middle; }
+  details.settings[open] .settings-chips { display: none; }   /* controls take over when open */
+  .settings-chips .chip {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 2px 9px; font-size: 12px; font-weight: 500; color: var(--text-2);
+  }
+  .settings-chips .chip b { color: var(--text-1); font-weight: 600; }
+  .settings-chips .chip.off { color: var(--text-3); }
   .hero {
     display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 18px;
   }
@@ -291,7 +299,7 @@
   <span class="badge-acc" onclick="showTab('acc')">Backtested: within <b>0.007 RPS</b> of Pinnacle closing odds — see the evidence</span><span class="info" id="rps-help"><button type="button" class="info-q" aria-expanded="false" aria-controls="rps-pop" aria-label="What is RPS?">?</button><span class="info-pop" id="rps-pop" role="tooltip" hidden><b>Ranked Probability Score</b> — measures how well predicted outcome probabilities match actual results. Lower is better. Bookmakers typically sit around 0.19; a 0.007 gap means our calibrated model is within noise of the sharpest market.</span></span>
   <div class="recal-line" id="recal-line" hidden></div>
 
-  <details class="settings"><summary>Model settings</summary>
+  <details class="settings"><summary>Model settings<span class="settings-chips" id="settings-chips"></span></summary>
   <div class="controls" style="margin-top:12px">
     <div class="ctl"><label for="ratings">Ratings</label>
       <select id="ratings">
@@ -1786,6 +1794,29 @@ function initInfo() {
 }
 initInfo();
 
+/* Model-settings disclosure: a summary chip line recaps the current
+   configuration while collapsed; the controls take over when expanded. */
+function updateSettingsChips() {
+  const box = document.getElementById("settings-chips");
+  if (!box) return;
+  const model = document.getElementById("model").value === "poisson" ? "Poisson" : "Elo";
+  const dcOn = document.getElementById("dc").checked;
+  const ratings = document.getElementById("ratings").value === "calibrated" ? "Fitted 2023–26" : "Hand-set defaults";
+  const seed = (parseInt(document.getElementById("seed").value, 10) || 42) >>> 0;
+  box.innerHTML =
+    `<span class="chip"><b>${model}</b></span>` +
+    `<span class="chip${dcOn ? "" : " off"}">Dixon-Coles <b>${dcOn ? "ON" : "OFF"}</b></span>` +
+    `<span class="chip">${ratings}</span>` +
+    `<span class="chip">seed <b>${seed}</b></span>`;
+}
+["model", "dc", "ratings", "seed"].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("change", updateSettingsChips);
+  if (id === "seed") el.addEventListener("input", updateSettingsChips);
+});
+updateSettingsChips();
+
 /* Shareable URLs: the active tab (and any Scenario Lab pins) live in the
    hash, so a view can be linked and restored on load. */
 function activeTab() {
@@ -1873,6 +1904,7 @@ function applyConstants(c) {
 /* Auto-run: the visitor should see the answer, not a button. */
 window.addEventListener("DOMContentLoaded", () => {
   hydrateFromParams();   // shared-link settings hydrate the controls before the run
+  updateSettingsChips(); // reflect any hydrated settings in the summary chips
   restoreFromHash();
   setRecalLine();        // from the embedded season_state; refreshed after hydrate
   hydrateFromBundle().finally(() => {
