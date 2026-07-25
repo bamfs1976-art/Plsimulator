@@ -164,9 +164,9 @@
   .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
   .brand .mark {
     width: 34px; height: 34px; border-radius: 9px; background: var(--grad);
-    color: #fff; font: 800 15px/34px var(--font-display); text-align: center;
-    box-shadow: var(--grad-glow); flex-shrink: 0;
+    box-shadow: var(--grad-glow); flex-shrink: 0; overflow: hidden;
   }
+  .brand .mark svg { display: block; width: 100%; height: 100%; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px;
     margin-right: 7px; vertical-align: baseline; }
   footer.site {
@@ -295,7 +295,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="brand"><span class="mark">PL</span><h1 style="margin:0">Premier League 2026/27 Simulator</h1></div>
+  <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 100 100"><defs><linearGradient id="plmark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2456b8"/><stop offset="0.5" stop-color="#2a78d6"/><stop offset="1" stop-color="#6c56c9"/></linearGradient></defs><rect width="100" height="100" fill="url(#plmark)"/><g transform="translate(-5,0)" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M30 54 V16 H42 a11 11 0 0 1 0 22 H30"/><path d="M60 16 V54 H80"/></g></svg></span><h1 style="margin:0">Premier League 2026/27 Simulator</h1></div>
   <p class="sub">10,000 simulated seasons of the real 2026/27 fixture list — recalibrated weekly from results, entirely in your browser.</p>
   <span class="badge-acc" onclick="showTab('acc')">Backtested: within <b>0.007 RPS</b> of Pinnacle closing odds — see the evidence</span><span class="info" id="rps-help"><button type="button" class="info-q" aria-expanded="false" aria-controls="rps-pop" aria-label="What is RPS?">?</button><span class="info-pop" id="rps-pop" role="tooltip" hidden><b>Ranked Probability Score</b> — measures how well predicted outcome probabilities match actual results. Lower is better. Bookmakers typically sit around 0.19; a 0.007 gap means our calibrated model is within noise of the sharpest market.</span></span>
   <div class="recal-line" id="recal-line" hidden></div>
