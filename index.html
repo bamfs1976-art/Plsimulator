@@ -169,6 +169,11 @@
   }
   .mover .up { color: var(--series-2); font-weight: 700; }
   .mover .dn { color: var(--danger); font-weight: 700; }
+  .mover.mover-h { background: none; padding-left: 0; color: var(--text-2); font-weight: 600; }
+  .recal-line { margin: -6px 0 16px; font-size: 13px; color: var(--text-2); }
+  .recal-line b { color: var(--text-1); }
+  .recal-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--series-2); margin-right: 6px; vertical-align: middle; }
   dialog.team {
     border: 1px solid var(--border); border-radius: 14px; padding: 22px;
     background: var(--surface); color: var(--text-1);
@@ -263,6 +268,7 @@
   <div class="brand"><span class="mark">PL</span><h1 style="margin:0">Premier League 2026/27 Simulator</h1></div>
   <p class="sub">10,000 simulated seasons of the real 2026/27 fixture list — recalibrated weekly from results, entirely in your browser.</p>
   <span class="badge-acc" onclick="showTab('acc')">Backtested: within <b>0.007 RPS</b> of Pinnacle closing odds — see the evidence</span><span class="info" id="rps-help"><button type="button" class="info-q" aria-expanded="false" aria-controls="rps-pop" aria-label="What is RPS?">?</button><span class="info-pop" id="rps-pop" role="tooltip" hidden><b>Ranked Probability Score</b> — measures how well predicted outcome probabilities match actual results. Lower is better. Bookmakers typically sit around 0.19; a 0.007 gap means our calibrated model is within noise of the sharpest market.</span></span>
+  <div class="recal-line" id="recal-line" hidden></div>
 
   <details class="settings"><summary>Model settings</summary>
   <div class="controls" style="margin-top:12px">
@@ -913,7 +919,6 @@ function renderMC(names, posCounts, ptsSum, n, pinned) {
     tr.addEventListener("click", () => openTeam(tr.dataset.team));
   });
   markScrollables(document.getElementById("mc-out"));
-  saveSnapshot(order, pct);
 }
 
 /* ---------------- sortable standings table ------------------------- */
@@ -1089,24 +1094,35 @@ function positionDistPop(evtOrEl) {
 }
 function hideDistPop() { if (distPopEl) distPopEl.hidden = true; }
 
-/* ---------------- odds movement since the model last changed ------- */
-function ratingsHash() {
-  const s = JSON.stringify(CALIBRATED_TEAMS || DEFAULT_TEAMS);
+/* ---------------- week-over-week movers ---------------------------- */
+const MOVERS_KEY = "plsim-movers";
+const MONTHS3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtISO(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+  return m ? `${+m[3]} ${MONTHS3[+m[2] - 1]} ${m[1]}` : (iso || "");
+}
+function recalDateStr() {
+  return (SEASON_STATE && SEASON_STATE.updated) ? fmtISO(SEASON_STATE.updated) : "";
+}
+/* The stored run is keyed by the fixture list, so a schedule change (new
+   season) never diffs against stale probabilities. */
+function fixtureHash() {
+  const s = JSON.stringify(getFixtures(Object.keys(currentTeams())));
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return String(h);
+  return String(h >>> 0);
 }
 function defaultCfg() {
   return document.getElementById("ratings").value === "calibrated" &&
     document.getElementById("model").value === "poisson";
 }
-function saveSnapshot(order, pct) {
-  if (!defaultCfg()) return;
-  try {
-    const snap = { hash: ratingsHash(), title: {}, rel: {} };
-    order.forEach(t => { snap.title[t] = pct(t, 1, 1); snap.rel[t] = pct(t, 18, 20); });
-    localStorage.setItem("plsim-snap", JSON.stringify(snap));
-  } catch (_) {}
+/* "Last recalibrated: <date>" near the headline claim. */
+function setRecalLine() {
+  const el = document.getElementById("recal-line");
+  if (!el) return;
+  const d = recalDateStr();
+  if (d) { el.innerHTML = `<span class="recal-dot"></span>Last recalibrated: <b>${esc(d)}</b>`; el.hidden = false; }
+  else el.hidden = true;
 }
 function favCard(pct, n) {
   const fav = getFav();
@@ -1118,29 +1134,50 @@ function favCard(pct, n) {
   return `<div class="stat"><div class="k">Simulated</div>
       <div class="v">${n.toLocaleString()}</div><div class="s">full seasons · ★ a club from its page</div></div>`;
 }
+/* A delta chip: +2.4pp / −1.1pp, coloured by whether the shift is good for
+   the club (rising title odds good, rising relegation odds bad). */
+function moverChip(team, d, danger, label) {
+  const good = danger ? d < 0 : d > 0;
+  const sign = d > 0 ? "+" : "−";
+  return `<span class="mover">${clubDot(team)}${esc(team)} ${label} ` +
+    `<span class="${good ? "up" : "dn"}">${sign}${Math.abs(d).toFixed(1)}pp</span></span>`;
+}
 function renderMovers(order, pct) {
   const box = document.getElementById("mc-movers");
   box.innerHTML = "";
   if (!defaultCfg()) return;
+  const hash = fixtureHash();
+  const cur = {};
+  order.forEach(t => cur[t] = { title: pct(t, 1, 1), rel: pct(t, 18, 20) });
   let prev = null;
-  try { prev = JSON.parse(localStorage.getItem("plsim-snap") || "null"); } catch (_) {}
-  if (!prev || prev.hash === ratingsHash()) {
-    box.innerHTML = '<div class="movers"><span class="mover" style="background:none;padding-left:0">' +
-      "Movers appear here once the model has been recalibrated since your last visit — check back after Monday's update.</span></div>";
-    return;
+  try { prev = JSON.parse(localStorage.getItem(MOVERS_KEY) || "null"); } catch (_) {}
+  if (prev && prev.hash === hash && prev.clubs) {
+    const delta = (t, k) => cur[t][k] - (prev.clubs[t] ? prev.clubs[t][k] : cur[t][k]);
+    const titleMoves = order.map(t => ({ t, d: delta(t, "title") }))
+      .filter(m => Math.abs(m.d) >= 0.3).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3);
+    const relMoves = order.map(t => ({ t, d: delta(t, "rel") }))
+      .filter(m => Math.abs(m.d) >= 0.5).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3);
+    if (titleMoves.length || relMoves.length) {
+      const since = prev.date ? ` since ${esc(prev.date)}` : " since your last run";
+      let html = `<div class="movers"><span class="mover mover-h">Biggest shifts${since}</span>`;
+      if (titleMoves.length) {
+        html += `<span class="mover mover-h">Title race</span>`;
+        titleMoves.forEach(m => html += moverChip(m.t, m.d, false, "title"));
+      }
+      if (relMoves.length) {
+        html += `<span class="mover mover-h">Relegation</span>`;
+        relMoves.forEach(m => html += moverChip(m.t, m.d, true, "rel"));
+      }
+      box.innerHTML = html + "</div>";
+    } else {
+      box.innerHTML = '<div class="movers"><span class="mover mover-h">No notable week-over-week shifts since your last run.</span></div>';
+    }
+  } else {
+    box.innerHTML = '<div class="movers"><span class="mover mover-h">Week-over-week movers appear here from your next run onward.</span></div>';
   }
-  const moves = order.map(t => ({
-    t, d: pct(t, 1, 1) - (prev.title[t] || 0), rd: pct(t, 18, 20) - (prev.rel[t] || 0),
-  }));
-  const chips = [];
-  moves.sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3)
-    .filter(m => Math.abs(m.d) >= 0.5).forEach(m => chips.push(
-      `<span class="mover">${esc(m.t)} title <span class="${m.d > 0 ? 'up' : 'dn'}">${m.d > 0 ? '▲' : '▼'}${Math.abs(m.d).toFixed(1)}%</span></span>`));
-  const rm = moves.sort((a, b) => Math.abs(b.rd) - Math.abs(a.rd))[0];
-  if (rm && Math.abs(rm.rd) >= 1) chips.push(
-    `<span class="mover">${esc(rm.t)} relegation <span class="${rm.rd > 0 ? 'dn' : 'up'}">${rm.rd > 0 ? '▲' : '▼'}${Math.abs(rm.rd).toFixed(1)}%</span></span>`);
-  if (chips.length) box.innerHTML =
-    `<div class="movers"><span class="mover" style="background:none;padding-left:0">Since the last model update:</span>${chips.join("")}</div>`;
+  /* Persist this run so the next visit (typically after a Monday recalibration)
+     has something to diff against. */
+  try { localStorage.setItem(MOVERS_KEY, JSON.stringify({ hash, date: recalDateStr(), clubs: cur })); } catch (_) {}
 }
 
 /* ---------------- team drill-down ---------------------------------- */
@@ -1808,8 +1845,11 @@ function applyConstants(c) {
 window.addEventListener("DOMContentLoaded", () => {
   hydrateFromParams();   // shared-link settings hydrate the controls before the run
   restoreFromHash();
-  hydrateFromBundle().finally(() =>
-    setTimeout(() => document.getElementById("run-mc").click(), 30));
+  setRecalLine();        // from the embedded season_state; refreshed after hydrate
+  hydrateFromBundle().finally(() => {
+    setRecalLine();
+    setTimeout(() => document.getElementById("run-mc").click(), 30);
+  });
 });
 
 /* PWA: sw.js keeps the shell and the last model.json available offline. */
