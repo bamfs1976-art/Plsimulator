@@ -9,13 +9,14 @@
 <meta property="og:title" content="Premier League 2026/27 Simulator">
 <meta property="og:description" content="10,000 simulated seasons of the real fixture list — recalibrated weekly. Backtested against the betting market.">
 <meta property="og:url" content="https://plsimulation.netlify.app/">
-<meta property="og:image" content="https://plsimulation.netlify.app/icon-512.png">
-<meta property="og:image:width" content="512">
-<meta property="og:image:height" content="512">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://plsimulation.netlify.app/og-default.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Premier League 2026/27 title favourite, most likely relegated, and top-6 odds from 10,000 simulated seasons.">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Premier League 2026/27 Simulator">
 <meta name="twitter:description" content="10,000 simulated seasons of the real fixture list — recalibrated weekly. Backtested against the betting market.">
-<meta name="twitter:image" content="https://plsimulation.netlify.app/icon-512.png">
+<meta name="twitter:image" content="https://plsimulation.netlify.app/og-default.png">
 <meta name="theme-color" content="#2a78d6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -26,6 +27,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%232a78d6'/%3E%3Ctext x='8' y='11.5' font-size='9' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3EPL%3C/text%3E%3C/svg%3E">
+<script src="og-render.js" defer></script>
 <style>
   :root {
     --surface: #ffffff; --surface-2: #f4f4f2;
@@ -280,6 +282,7 @@
         </select></div>
       <button class="primary" id="run-mc">Run Monte Carlo</button>
       <button class="primary" id="share-mc" style="background:var(--surface-2);color:var(--text-1);border:1px solid var(--border)">Share ↗</button>
+      <button class="primary" id="ogimg-mc" style="background:var(--surface-2);color:var(--text-1);border:1px solid var(--border)">Download share image</button>
       <span class="note" id="mc-status"></span>
     </div>
     <div class="prog" id="mc-prog"><div></div></div>
@@ -1258,6 +1261,45 @@ document.getElementById("share-mc").onclick = async () => {
   history.replaceState(null, "", "?" + shareParams().toString() + location.hash);
   toast(await copyText(url) ? "Copied!" : "Copy failed — link is in the address bar");
 };
+/* ---------------- downloadable share image ------------------------- */
+/* Build the share-card data from the current run and render it through
+   the shared 1200×630 renderer (og-render.js) — the same code the build
+   step uses for /og-default.png. */
+function ogData() {
+  const mc = window.LAST_MC;
+  if (!mc) return null;
+  const { posCounts, n } = mc;
+  const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
+  const names = Object.keys(posCounts);
+  const byTitle = [...names].sort((a, b) => pct(b, 1, 1) - pct(a, 1, 1));
+  const byRel = [...names].sort((a, b) => pct(b, 18, 20) - pct(a, 18, 20));
+  return {
+    seasons: n.toLocaleString(),
+    dateStr: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    favourite: { name: byTitle[0], pct: pct(byTitle[0], 1, 1).toFixed(0) },
+    relegated: { name: byRel[0], pct: pct(byRel[0], 18, 20).toFixed(0) },
+    top6: byTitle.slice(0, 6).map((t, i) => ({
+      rank: i + 1, name: t, color: CLUB_COLOR[t] || "#3f8ce8",
+      title: pct(t, 1, 1).toFixed(1), top4: pct(t, 1, 4).toFixed(0), rel: pct(t, 18, 20).toFixed(0),
+    })),
+  };
+}
+document.getElementById("ogimg-mc").onclick = () => {
+  const d = ogData();
+  if (!d || !window.PLShareCard) return;
+  const c = document.createElement("canvas");
+  c.width = window.PLShareCard.WIDTH; c.height = window.PLShareCard.HEIGHT;
+  window.PLShareCard.draw(c.getContext("2d"), d);
+  c.toBlob(async blob => {
+    const file = new File([blob], "pl-2026-27-standings.png", { type: "image/png" });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "PL 2026/27 odds" }); return; } catch (_) {}
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+  });
+};
+
 function hydrateFromParams() {
   const q = new URLSearchParams(location.search);
   if (!SHARE_KEYS.some(k => q.has(k))) return false;
