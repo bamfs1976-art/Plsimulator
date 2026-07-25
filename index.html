@@ -220,6 +220,7 @@
   }
   .mc-card-stats .cs-k { font-size: 11px; color: var(--text-2); }
   .mc-card-stats .cs-v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .mc-card-stats .cs-rel.hot .cs-v { color: var(--danger); }
   @media (max-width: 720px) {
     #mc-standings .mc-scroll { display: none; }
     #mc-standings .mc-cards { display: grid; grid-template-columns: 1fr; gap: 8px; }
@@ -898,6 +899,7 @@ const MC_COLS = [
 ];
 let MC_CURR = null, MC_PREV = null;
 let mcSort = { key: "title", dir: "desc" };   // persists across runs and views
+const REL_HOT = 15;   // Rel% at/above this reads as red; below stays muted
 function mcMetrics(names, posCounts, ptsSum, n) {
   const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
   const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
@@ -953,7 +955,10 @@ function renderStandings() {
     let cells = `<td>${i + 1}</td><td class="t">${clubDot(t)}${esc(t)}</td>`;
     MC_COLS.forEach(c => {
       const v = c.get(M, t);
-      const style = c.bar ? ` style="${bar(v, 100, c.bar)}"` : "";
+      /* Rel% bar is only alarming above the 15% survival-worry threshold;
+         below it the bar stays a muted neutral so it doesn't cry wolf. */
+      const barColor = c.key === "rel" ? (v >= REL_HOT ? "var(--danger)" : "var(--text-3)") : c.bar;
+      const style = barColor ? ` style="${bar(v, 100, barColor)}"` : "";
       cells += `<td class="${c.opt ? "c-opt" : ""}"${style}>${c.fmt(v)}</td>`;
     });
     if (showDelta) cells += `<td>${deltaCell(activeCol, t)}</td>`;
@@ -968,7 +973,7 @@ function renderStandings() {
       `<div class="mc-card-stats">` +
       `<div><span class="cs-k">Title</span><span class="cs-v">${M.title(t).toFixed(1)}%</span></div>` +
       `<div><span class="cs-k">Top 4</span><span class="cs-v">${M.top4(t).toFixed(0)}%</span></div>` +
-      `<div class="cs-rel"><span class="cs-k">Rel</span><span class="cs-v">${M.rel(t).toFixed(0)}%</span></div>` +
+      `<div class="cs-rel${M.rel(t) >= REL_HOT ? " hot" : ""}"><span class="cs-k">Rel</span><span class="cs-v">${M.rel(t).toFixed(0)}%</span></div>` +
       `</div></div>`;
   });
   box.innerHTML = `<div class="scroll mc-scroll"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>` +
