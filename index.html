@@ -890,6 +890,10 @@ function bar(v, max, color) {
   const w = Math.min(100, 100 * v / max);
   return `background:linear-gradient(90deg, color-mix(in srgb, ${color} 22%, transparent) ${w}%, transparent ${w}%)`;
 }
+/* 95% Monte-Carlo interval half-width (percentage points) for a probability
+   estimated from n independent simulated seasons — binomial standard error.
+   pFrac is a fraction (0–1); the result is in pp. */
+function ci95pp(pFrac, n) { return n > 0 ? 1.96 * Math.sqrt(Math.max(pFrac * (1 - pFrac), 0) / n) * 100 : 0; }
 function renderMC(names, posCounts, ptsSum, n, pinned) {
   const pct = (t, a, b) => { let s = 0; for (let i = a - 1; i < b; i++) s += posCounts[t][i]; return 100 * s / n; };
   const avgPos = t => posCounts[t].reduce((s, c, i) => s + (i + 1) * c, 0) / n;
@@ -901,9 +905,9 @@ function renderMC(names, posCounts, ptsSum, n, pinned) {
   const chaser = order[1];
   document.getElementById("mc-hero").innerHTML = `<div class="hero">
     <div class="stat"><div class="k">Title favourite</div>
-      <div class="v">${esc(favT)}</div><div class="s">${pct(favT, 1, 1).toFixed(0)}% champion · ${esc(chaser)} ${pct(chaser, 1, 1).toFixed(0)}%</div></div>
+      <div class="v">${esc(favT)}</div><div class="s">${pct(favT, 1, 1).toFixed(0)}% ±${ci95pp(pct(favT, 1, 1) / 100, n).toFixed(1)} champion · ${esc(chaser)} ${pct(chaser, 1, 1).toFixed(0)}%</div></div>
     <div class="stat"><div class="k">Most likely to go down</div>
-      <div class="v">${esc(relOrder[0])}</div><div class="s">${pct(relOrder[0], 18, 20).toFixed(0)}% relegated · ${esc(relOrder[1])} ${pct(relOrder[1], 18, 20).toFixed(0)}%</div></div>
+      <div class="v">${esc(relOrder[0])}</div><div class="s">${pct(relOrder[0], 18, 20).toFixed(0)}% ±${ci95pp(pct(relOrder[0], 18, 20) / 100, n).toFixed(1)} relegated · ${esc(relOrder[1])} ${pct(relOrder[1], 18, 20).toFixed(0)}%</div></div>
     ${favCard(pct, n)}
   </div>`;
   renderMovers(order, pct);
@@ -1285,13 +1289,14 @@ function openTeam(team) {
     <h2 style="margin:0 0 2px;font-size:20px">${clubDot(team)}${esc(team)}</h2>
     <p class="note" style="margin:0 0 14px">attack ${r.attack.toFixed(2)} · defence ${r.defence.toFixed(2)}${r.home ? " · home advantage " + r.home.toFixed(2) : ""}</p>
     <div class="hero" style="margin-bottom:16px">
-      <div class="stat"><div class="k">Title</div><div class="v">${pctAt(0).toFixed(1)}%</div></div>
-      <div class="stat"><div class="k">Top 4</div><div class="v">${(pctAt(0) + pctAt(1) + pctAt(2) + pctAt(3)).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">Title</div><div class="v">${pctAt(0).toFixed(1)}%</div><div class="s">±${ci95pp(pctAt(0) / 100, n).toFixed(1)}pp</div></div>
+      <div class="stat"><div class="k">Top 4</div><div class="v">${(pctAt(0) + pctAt(1) + pctAt(2) + pctAt(3)).toFixed(1)}%</div><div class="s">±${ci95pp((pctAt(0) + pctAt(1) + pctAt(2) + pctAt(3)) / 100, n).toFixed(1)}pp</div></div>
       <div class="stat"><div class="k">European</div><div class="v">${(pctAt(0)+pctAt(1)+pctAt(2)+pctAt(3)+pctAt(4)+pctAt(5)+pctAt(6)).toFixed(1)}%</div>
         <div class="s">UCL ${(pctAt(0)+pctAt(1)+pctAt(2)+pctAt(3)+pctAt(4)).toFixed(0)} · EL ${pctAt(5).toFixed(0)} · ECL ${pctAt(6).toFixed(0)}</div></div>
-      <div class="stat"><div class="k">Relegated</div><div class="v">${(pctAt(17) + pctAt(18) + pctAt(19)).toFixed(1)}%</div></div>
+      <div class="stat"><div class="k">Relegated</div><div class="v">${(pctAt(17) + pctAt(18) + pctAt(19)).toFixed(1)}%</div><div class="s">±${ci95pp((pctAt(17) + pctAt(18) + pctAt(19)) / 100, n).toFixed(1)}pp</div></div>
       <div class="stat"><div class="k">Points</div><div class="v">${q(0.5)}</div><div class="s">80% range ${q(0.1)}–${q(0.9)}</div></div>
     </div>
+    <p class="note" style="margin:-6px 0 14px">± is the 95% Monte-Carlo interval at ${n.toLocaleString()} seasons — run more seasons to shrink it.</p>
     ${spark}
     <p class="charttitle">Finishing position odds</p>
     <svg viewBox="0 0 520 98" style="width:100%;height:auto" role="img" aria-label="finishing position distribution">${bars}</svg>
