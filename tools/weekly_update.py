@@ -222,6 +222,14 @@ def main():
     except Exception as exc:  # noqa: BLE001
         print(f"forecast write skipped: {exc}")
 
+    # Reliability profile from the walk-forward backtest (best effort - a
+    # calibration hiccup must not break the refit). Runs before the bundle
+    # so model.json carries the fresh numbers.
+    try:
+        subprocess.run([sys.executable, "tools/build_calibration.py"], check=True, timeout=600)
+    except Exception as exc:  # noqa: BLE001
+        print(f"calibration profile skipped: {exc}")
+
     subprocess.run([sys.executable, "tools/snapshot_history.py"], check=True)
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
     subprocess.run([sys.executable, "tools/build_form.py"], check=True)

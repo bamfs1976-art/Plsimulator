@@ -433,6 +433,11 @@
         existence, from goals and xG alone. Closing odds only exist at kickoff; this model forecasts the whole season.</p>
     </section>
     <section class="block">
+      <p class="charttitle">Calibration — do the probabilities mean what they say?<span class="info" id="ece-help"><button type="button" class="info-q" aria-expanded="false" aria-controls="ece-pop" aria-label="What is calibration and ECE?">?</button><span class="info-pop" id="ece-pop" role="tooltip" hidden>A forecast is <b>calibrated</b> if things it calls 30% likely happen about 30% of the time. Each point bins the walk-forward predictions and plots the average predicted probability against how often it actually happened; the closer to the diagonal, the better. <b>ECE</b> (Expected Calibration Error) is the average gap — lower is better.</span></span></p>
+      <p class="note" style="margin-bottom:10px">Reliability of the model's win/draw/loss probabilities on the held-out backtest — a different, complementary check to RPS: RPS rewards sharpness, this asks whether the probabilities are honest.</p>
+      <div id="acc-cal-out"></div>
+    </section>
+    <section class="block">
       <p class="charttitle">Live track record — 2026/27, scored as it happens</p>
       <p class="note" style="margin-bottom:10px">Every Monday the model publishes forecasts for the upcoming fixtures;
         the following week they are scored against what actually happened (RPS and Brier, same metrics as the
@@ -503,6 +508,7 @@ let TEAM_FORM = null;         // recent form per club (tools/build_form.py)
 let SEASON_STATE = null;      // season label / matchdays played / live flag
 let PLAYED_RESULTS = null;    // played 2026/27 results, pinned by the MC
 let LEDGER = null;            // live accuracy ledger (tools/weekly_update.py)
+let CALIBRATION = null;       // reliability profile (tools/build_calibration.py)
 const MAXG = 10, GRID = MAXG + 1, LN10 = Math.log(10);
 const BACKTEST_RPS = 0.2123, MARKET_RPS = 0.1994; // static benchmarks (Accuracy tab)
 /* Model constants: reassignable so model.json's bundle constants (including
@@ -1864,6 +1870,62 @@ function renderLedger() {
   markScrollables(box);
 }
 
+/* ---------------- calibration / reliability diagram ---------------- */
+function reliabilityPoints(profile, color, label) {
+  const S = 300, pad = 34, plot = S - pad - 8;
+  const X = p => pad + p * plot, Y = p => S - pad - p * plot;
+  const pts = profile.bins.filter(b => b.count > 0);
+  const maxC = Math.max(...pts.map(b => b.count), 1);
+  let line = "", dots = "";
+  const coords = pts.map(b => `${X(b.mean_pred).toFixed(1)},${Y(b.observed).toFixed(1)}`);
+  line = `<polyline points="${coords.join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+  pts.forEach(b => {
+    const r = 2.5 + 4 * Math.sqrt(b.count / maxC);
+    dots += `<circle cx="${X(b.mean_pred).toFixed(1)}" cy="${Y(b.observed).toFixed(1)}" r="${r.toFixed(1)}" fill="${color}" fill-opacity="0.85">` +
+      `<title>${label}: predicted ${(b.mean_pred * 100).toFixed(0)}%, observed ${(b.observed * 100).toFixed(0)}% (${b.count})</title></circle>`;
+  });
+  return line + dots;
+}
+function renderCalibration() {
+  const box = document.getElementById("acc-cal-out");
+  if (!box) return;
+  if (!CALIBRATION || !CALIBRATION.model) {
+    box.innerHTML = '<p class="note">Calibration profile appears after the next backtest run.</p>';
+    return;
+  }
+  const S = 300, pad = 34, plot = S - pad - 8;
+  const X = p => pad + p * plot, Y = p => S - pad - p * plot;
+  let svg = `<svg viewBox="0 0 ${S} ${S}" style="width:100%;max-width:320px;height:auto" role="img" aria-label="reliability diagram">`;
+  /* grid + perfect-calibration diagonal */
+  svg += `<rect x="${pad}" y="8" width="${plot}" height="${plot}" fill="none" stroke="var(--border)"/>`;
+  svg += `<line x1="${pad}" y1="${S - pad}" x2="${pad + plot}" y2="8" stroke="var(--text-3)" stroke-dasharray="4 4" stroke-width="1.5"/>`;
+  for (let g = 0; g <= 1.0001; g += 0.25) {
+    svg += `<text x="${X(g)}" y="${S - pad + 14}" text-anchor="middle" class="axis">${(g * 100).toFixed(0)}</text>`;
+    svg += `<text x="${pad - 6}" y="${Y(g) + 3}" text-anchor="end" class="axis">${(g * 100).toFixed(0)}</text>`;
+  }
+  svg += `<text x="${pad + plot / 2}" y="${S - 2}" text-anchor="middle" class="axis">predicted probability (%)</text>`;
+  svg += `<text transform="translate(10,${8 + plot / 2}) rotate(-90)" text-anchor="middle" class="axis">observed frequency (%)</text>`;
+  if (CALIBRATION.market) svg += reliabilityPoints(CALIBRATION.market, "var(--text-3)", "Market");
+  svg += reliabilityPoints(CALIBRATION.model, "var(--series-1)", "Model");
+  svg += `</svg>`;
+  const m = CALIBRATION.model, mk = CALIBRATION.market;
+  box.innerHTML =
+    `<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">` +
+    `<div>${svg}</div>` +
+    `<div style="min-width:200px">` +
+    `<div class="metrics" style="margin:6px 0 12px">` +
+    `<div class="metric"><div class="k">Model ECE</div><div class="v">${m.ece.toFixed(4)}</div></div>` +
+    (mk ? `<div class="metric"><div class="k">Market ECE</div><div class="v">${mk.ece.toFixed(4)}</div></div>` : "") +
+    `<div class="metric"><div class="k">Predictions</div><div class="v">${m.n.toLocaleString()}</div></div>` +
+    `</div>` +
+    `<p class="note"><span class="dot" style="background:var(--series-1)"></span>Model` +
+    (mk ? ` &nbsp;<span class="dot" style="background:var(--text-3)"></span>Market` : "") +
+    `. Dot size = number of predictions in that band. On the dashed line = perfectly calibrated.` +
+    (mk && m.ece <= mk.ece ? ` The model is <b>better calibrated than the market here</b>, even though the market is sharper on RPS.` : "") +
+    `</p></div></div>`;
+  markScrollables(box);
+}
+
 /* ---------------- biggest shocks vs the model ---------------- */
 function rpsWDL(probs, outcome) {
   let cumP = 0, cumO = 0, err = 0;
@@ -1923,7 +1985,7 @@ function showTab(tab) {
   if (tab === "md") renderMatchday();
   if (tab === "scenario") scInit();
   if (tab === "form") formInit();
-  if (tab === "acc") { renderLedger(); renderShocks(); }
+  if (tab === "acc") { renderCalibration(); renderLedger(); renderShocks(); }
   updateHash();
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
@@ -2063,6 +2125,7 @@ async function hydrateFromBundle() {
     if (m.season_state) SEASON_STATE = m.season_state;
     if (Array.isArray(m.results)) PLAYED_RESULTS = m.results;
     if (Array.isArray(m.ledger)) LEDGER = m.ledger;
+    if (m.calibration && m.calibration.model) CALIBRATION = m.calibration;
   } catch (_) { /* offline: the embedded fallback stands */ }
 }
 function applyConstants(c) {
@@ -2431,6 +2494,10 @@ ODDS_HISTORY = [
   }
  }
 ];
+</script>
+<script id="calibration-data">
+/* Reliability profile (tools/build_calibration.py) */
+CALIBRATION = {"target":"2025-26","model":{"bins":[{"mean_pred":0.0797,"observed":0.0769,"count":13},{"mean_pred":0.1624,"observed":0.1724,"count":116},{"mean_pred":0.2506,"observed":0.2722,"count":507},{"mean_pred":0.3499,"observed":0.3297,"count":185},{"mean_pred":0.4492,"observed":0.4685,"count":143},{"mean_pred":0.5444,"observed":0.4587,"count":109},{"mean_pred":0.6481,"observed":0.6182,"count":55},{"mean_pred":0.7568,"observed":0.7273,"count":11},{"mean_pred":0.8061,"observed":1.0,"count":1},{"mean_pred":null,"observed":null,"count":0}],"ece":0.0264,"n":1140},"market":{"bins":[{"mean_pred":0.0757,"observed":0.0,"count":10},{"mean_pred":0.1567,"observed":0.1222,"count":90},{"mean_pred":0.258,"observed":0.2918,"count":257},{"mean_pred":0.3416,"observed":0.3093,"count":97},{"mean_pred":0.4429,"observed":0.473,"count":74},{"mean_pred":0.5456,"observed":0.4286,"count":49},{"mean_pred":0.646,"observed":0.6286,"count":35},{"mean_pred":0.7393,"observed":0.8667,"count":15},{"mean_pred":0.8271,"observed":1.0,"count":3},{"mean_pred":null,"observed":null,"count":0}],"ece":0.0424,"n":630},"note":"One-vs-rest reliability of win/draw/away probabilities over the walk-forward backtest. mean_pred vs observed per decile; ECE is the count-weighted mean gap. Lower ECE = better calibrated."};
 </script>
 <script id="ledger-data">
 /* Live accuracy ledger (tools/weekly_update.py) */
