@@ -608,6 +608,22 @@ function lambdas(model, teams, home, away) {
   const skew = ELO_SCALE * (2 * exp - 1) * LN10, half = (BASE_H + BASE_A) / 2;
   return [half * Math.exp(skew), half * Math.exp(-skew)];
 }
+/* Human-readable decomposition of a fixture's goal expectations — shows
+   which factor (attack, opponent defence, home advantage, Elo gap) drives
+   the numbers. Surfaced as a hover title on the xG cell. */
+function lambdaExplain(model, teams, home, away) {
+  const th = teams[home], ta = teams[away], [lh, la] = lambdas(model, teams, home, away);
+  if (model === "poisson") {
+    const hh = th.home || 1;
+    return `${home} xG ${lh.toFixed(2)} = ${BASE_H.toFixed(2)} base × ${th.attack.toFixed(2)} attack × ` +
+      `${ta.defence.toFixed(2)} ${away} defence${hh !== 1 ? ` × ${hh.toFixed(2)} home` : ""}\n` +
+      `${away} xG ${la.toFixed(2)} = ${BASE_A.toFixed(2)} base × ${ta.attack.toFixed(2)} attack × ${th.defence.toFixed(2)} ${home} defence`;
+  }
+  const diff = th.elo - ta.elo + ELO_HOME;
+  const exp = 1 / (1 + Math.pow(10, -diff / 400));
+  return `Elo ${Math.round(th.elo)} vs ${Math.round(ta.elo)} (+${ELO_HOME} home) → ` +
+    `${(exp * 100).toFixed(0)}% expected result → xG ${lh.toFixed(2)}–${la.toFixed(2)}`;
+}
 function scoreGrid(lh, la, dc) {
   const ph = [], pa = [];
   let fh = Math.exp(-lh), fa = Math.exp(-la);
@@ -1256,7 +1272,7 @@ function openTeam(team) {
       const opp = home ? a : h;
       const ls = likelyScore(g);
       const scoreStr = home ? `${ls[0]}-${ls[1]}` : `${ls[1]}-${ls[0]}`;
-      fxRows += `<tr><td class="t">MD${md + 1} ${home ? "v" : "@"} ${esc(opp)}</td>` +
+      fxRows += `<tr title="${esc(lambdaExplain(cfg.model, teams, h, a))}" style="cursor:help"><td class="t">MD${md + 1} ${home ? "v" : "@"} ${esc(opp)}</td>` +
         `<td style="${bar(win * 100, 100, 'var(--series-1)')}">${Math.round(win * 100)}%</td>` +
         `<td>${Math.round(pD * 100)}%</td><td>${Math.round((1 - win - pD) * 100)}%</td>` +
         `<td>${scoreStr}</td></tr>`;
@@ -1434,12 +1450,12 @@ function renderMatchday() {
       `<td style="${bar(pH * 100, 100, 'var(--series-1)')}">${(pH * 100).toFixed(0)}</td>` +
       `<td>${(pD * 100).toFixed(0)}</td>` +
       `<td style="${bar(pA * 100, 100, 'var(--series-2)')}">${(pA * 100).toFixed(0)}</td>` +
-      `<td>${lh.toFixed(2)}–${la.toFixed(2)}</td>` +
+      `<td title="${esc(lambdaExplain(cfg.model, cfg.teams, h, a))}" style="cursor:help;text-decoration:underline dotted var(--text-3)">${lh.toFixed(2)}–${la.toFixed(2)}</td>` +
       `<td>${(m.btts * 100).toFixed(0)}</td><td>${(m.over * 100).toFixed(0)}</td>` +
       `<td>${esc(scores)}</td></tr>`;
   }
   html += "</tbody></table></div>" +
-    '<p class="note" style="margin-top:8px">BTTS = both teams to score. O2.5 = over 2.5 goals. Likely scores = the three most probable correct scores from the model.</p>';
+    '<p class="note" style="margin-top:8px">BTTS = both teams to score. O2.5 = over 2.5 goals. Likely scores = the three most probable correct scores from the model. Hover the xG cell to see how each team\'s goal expectation breaks down.</p>';
   document.getElementById("md-out").innerHTML = html;
   markScrollables(document.getElementById("md-out"));
 }
