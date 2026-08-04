@@ -1446,18 +1446,85 @@ function renderMatchday() {
     const [pH, pD, pA] = outcomeProbs(grid);
     const m = marketStats(grid);
     const scores = m.top.slice(0, 3).map(c => `${c[0]}-${c[1]}`).join(" · ");
-    html += `<tr><td class="t">${clubDot(h)}${esc(h)}</td><td class="t">${clubDot(a)}${esc(a)}</td>` +
+    html += `<tr class="md-row clickable" data-h="${esc(h)}" data-a="${esc(a)}" title="Show correct-score grid and all markets">` +
+      `<td class="t">${clubDot(h)}${esc(h)}</td><td class="t">${clubDot(a)}${esc(a)}</td>` +
       `<td style="${bar(pH * 100, 100, 'var(--series-1)')}">${(pH * 100).toFixed(0)}</td>` +
       `<td>${(pD * 100).toFixed(0)}</td>` +
       `<td style="${bar(pA * 100, 100, 'var(--series-2)')}">${(pA * 100).toFixed(0)}</td>` +
       `<td title="${esc(lambdaExplain(cfg.model, cfg.teams, h, a))}" style="cursor:help;text-decoration:underline dotted var(--text-3)">${lh.toFixed(2)}–${la.toFixed(2)}</td>` +
       `<td>${(m.btts * 100).toFixed(0)}</td><td>${(m.over * 100).toFixed(0)}</td>` +
-      `<td>${esc(scores)}</td></tr>`;
+      `<td>${esc(scores)} <span class="note" style="font-size:11px">▾</span></td></tr>`;
   }
   html += "</tbody></table></div>" +
-    '<p class="note" style="margin-top:8px">BTTS = both teams to score. O2.5 = over 2.5 goals. Likely scores = the three most probable correct scores from the model. Hover the xG cell to see how each team\'s goal expectation breaks down.</p>';
+    '<p class="note" style="margin-top:8px">BTTS = both teams to score. O2.5 = over 2.5 goals. Likely scores = the three most probable correct scores from the model. Hover the xG cell for the goal-expectation breakdown; <b>tap any match</b> for the full correct-score grid and every goal market.</p>';
   document.getElementById("md-out").innerHTML = html;
+  document.querySelectorAll("#md-out tr.md-row").forEach(row =>
+    row.addEventListener("click", () => toggleMdDetail(row, cfg)));
   markScrollables(document.getElementById("md-out"));
+}
+/* All goal-market probabilities derivable from a single score grid. */
+function goalMarkets(grid) {
+  const G = GRID, over = [0, 0, 0, 0, 0];
+  let btts = 0, csH = 0, csA = 0, pH = 0, pD = 0, pA = 0, hMinus1 = 0, aMinus1 = 0;
+  for (let h = 0; h < G; h++) for (let a = 0; a < G; a++) {
+    const p = grid[h * G + a]; if (!p) continue;
+    const tot = h + a;
+    for (let l = 0; l < 5; l++) if (tot > l + 0.5) over[l] += p;
+    if (h >= 1 && a >= 1) btts += p;
+    if (a === 0) csH += p;
+    if (h === 0) csA += p;
+    if (h > a) pH += p; else if (h === a) pD += p; else pA += p;
+    if (h - a >= 2) hMinus1 += p;
+    if (a - h >= 2) aMinus1 += p;
+  }
+  return { over, btts, csH, csA, pH, pD, pA, hMinus1, aMinus1 };
+}
+/* Correct-score heatmap (0–5 each), most likely scoreline highlighted. */
+function scoreHeatSVG(grid, home, away) {
+  const N = 6, cell = 30, left = 34, top = 34, w = left + N * cell + 6, h = top + N * cell + 20;
+  let max = 0;
+  for (let hh = 0; hh < N; hh++) for (let aa = 0; aa < N; aa++) max = Math.max(max, grid[hh * GRID + aa]);
+  let svg = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:340px;height:auto" role="img" aria-label="correct score probabilities">`;
+  svg += `<text x="${left + N * cell / 2}" y="11" text-anchor="middle" class="axis">${esc(away)} goals →</text>`;
+  for (let aa = 0; aa < N; aa++) svg += `<text x="${left + aa * cell + cell / 2}" y="${top - 6}" text-anchor="middle" class="axis">${aa}</text>`;
+  for (let hh = 0; hh < N; hh++) {
+    svg += `<text x="${left - 6}" y="${top + hh * cell + cell / 2 + 3}" text-anchor="end" class="axis">${hh}</text>`;
+    for (let aa = 0; aa < N; aa++) {
+      const p = grid[hh * GRID + aa], frac = Math.pow(p / max, 0.5);
+      const isMax = p === max;
+      svg += `<rect x="${left + aa * cell}" y="${top + hh * cell}" width="${cell - 2}" height="${cell - 2}" rx="3" ` +
+        `fill="var(--series-1)" fill-opacity="${(0.05 + 0.9 * frac).toFixed(3)}" ${isMax ? 'stroke="var(--accent)" stroke-width="1.5"' : ""}>` +
+        `<title>${esc(home)} ${hh}–${aa} ${esc(away)}: ${(p * 100).toFixed(1)}%</title></rect>`;
+    }
+  }
+  svg += `<text x="4" y="${h - 4}" class="axis">${esc(home)} goals ↓ · outlined = most likely</text></svg>`;
+  return svg;
+}
+function toggleMdDetail(row, cfg) {
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains("md-detail")) { next.remove(); return; }
+  document.querySelectorAll("#md-out tr.md-detail").forEach(r => r.remove());
+  const h = row.dataset.h, a = row.dataset.a;
+  const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+  const grid = scoreGrid(lh, la, cfg.dc);
+  const M = goalMarkets(grid);
+  const pc = v => (v * 100).toFixed(0) + "%";
+  const mk = (label, val) => `<tr><td class="t">${label}</td><td>${pc(val)}</td></tr>`;
+  const markets =
+    `<table style="font-size:13px"><tbody>` +
+    mk("Over 1.5 goals", M.over[1]) + mk("Over 2.5 goals", M.over[2]) + mk("Over 3.5 goals", M.over[3]) +
+    mk("Both teams score", M.btts) +
+    mk(`Double chance ${esc(h)} or draw`, M.pH + M.pD) +
+    mk(`Double chance ${esc(a)} or draw`, M.pA + M.pD) +
+    mk(`${esc(h)} clean sheet`, M.csH) + mk(`${esc(a)} clean sheet`, M.csA) +
+    mk(`${esc(h)} -1 handicap`, M.hMinus1) + mk(`${esc(a)} -1 handicap`, M.aMinus1) +
+    `</tbody></table>`;
+  const tr = document.createElement("tr");
+  tr.className = "md-detail";
+  tr.innerHTML = `<td colspan="9" style="background:var(--surface-2)"><div style="display:flex;gap:24px;flex-wrap:wrap;padding:8px 4px">` +
+    `<div><p class="charttitle">Correct score</p>${scoreHeatSVG(grid, h, a)}</div>` +
+    `<div style="min-width:220px"><p class="charttitle">Goal markets</p>${markets}</div></div></td>`;
+  row.after(tr);
 }
 document.getElementById("run-md").onclick = renderMatchday;
 
