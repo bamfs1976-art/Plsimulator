@@ -459,6 +459,21 @@
     <p class="note">Attack = scoring multiplier vs an average side. Defence = conceding multiplier (lower is better).
        Fitted ratings come from a joint Poisson fit of 2,796 Premier League + Championship results, 2023–26.</p>
   </div>
+  <details class="settings" style="margin-top:30px">
+    <summary>Open data &amp; API</summary>
+    <div class="note" style="margin-top:8px;max-width:640px">
+      Every number here is served as static JSON, CORS-open so you can build on it — no key, no rate limit.
+      <ul style="margin:8px 0;padding-left:18px;line-height:1.9">
+        <li><a href="model.json"><code>/model.json</code></a> — the full model bundle: fitted team ratings, model
+          constants, the official fixture list, recent form, weekly odds snapshots and the live accuracy ledger.</li>
+        <li><a href="clubs/index.json"><code>/clubs/index.json</code></a> — index of all 20 clubs with title and relegation odds.</li>
+        <li><code>/clubs/&lt;slug&gt;.json</code> — one club's finishing-position distribution, title/top-4/Europe/relegation
+          odds, expected points and every remaining fixture's win/draw/loss probability
+          (e.g. <a href="clubs/arsenal.json"><code>/clubs/arsenal.json</code></a>).</li>
+      </ul>
+      Refreshed by the Monday recalibration. The same bundle powers <a href="https://gameweekedge.netlify.app">Gameweek Edge</a>, so the numbers never drift between the two.
+    </div>
+  </details>
   <footer class="site">
     <span>Recalibrated every Monday from real results.</span>
     <a href="https://gameweekedge.netlify.app">Play FPL? Gameweek Edge runs this exact model →</a>

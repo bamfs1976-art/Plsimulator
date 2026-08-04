@@ -293,11 +293,35 @@ def build():
         os.makedirs(club_dir, exist_ok=True)
         with open(os.path.join(club_dir, "index.html"), "w", encoding="utf-8") as fh:
             fh.write(page)
+
+        # Machine-readable sibling: /clubs/<slug>.json
+        club_json = {
+            "name": team, "slug": slug, "url": canonical,
+            "updated": season.get("updated"), "seasons": n,
+            "odds": {"title": round(title, 2), "top4": round(top4, 2),
+                     "europe": round(europe, 2), "relegation": round(rel, 2)},
+            "expected_points": round(xpts, 1), "likely_position": mlpos,
+            "position_distribution": [round(v, 3) for v in pos_pct],
+            "remaining_fixtures": [
+                {"md": r["md"], "opponent": r["opp"], "home": r["home"],
+                 "win": round(r["w"], 4), "draw": round(r["d"], 4), "loss": round(r["l"], 4)}
+                for r in rows
+            ],
+        }
+        with open(os.path.join(out_root, f"{slug}.json"), "w", encoding="utf-8") as fh:
+            json.dump(club_json, fh, separators=(",", ":"))
         written.append((slug, team, title, rel))
 
-    print(f"Wrote {len(written)} club pages under clubs/:")
+    # Index of all clubs for discovery: /clubs/index.json
+    index = [{"slug": s, "name": t, "url": f"{SITE}/clubs/{s}/",
+              "json": f"{SITE}/clubs/{s}.json", "title": round(ti, 2), "relegation": round(r, 2)}
+             for s, t, ti, r in written]
+    with open(os.path.join(out_root, "index.json"), "w", encoding="utf-8") as fh:
+        json.dump({"updated": season.get("updated"), "clubs": index}, fh, separators=(",", ":"))
+
+    print(f"Wrote {len(written)} club pages + JSON under clubs/:")
     for slug, team, title, rel in written:
-        print(f"  /clubs/{slug}/  — {team}: title {title:.1f}%, rel {rel:.1f}%")
+        print(f"  /clubs/{slug}/ (+ .json)  — {team}: title {title:.1f}%, rel {rel:.1f}%")
     return [s for s, *_ in written]
 
 
