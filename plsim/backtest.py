@@ -237,8 +237,14 @@ def run(seasons=cal.DEFAULT_SEASONS, target=None, cache_dir="data",
     return summaries, winner, market
 
 
-def _load_odds(season, cache_dir):
-    """De-vigged closing-odds probabilities keyed by (date, home, away)."""
+def _load_odds(season, cache_dir, method="proportional"):
+    """De-vigged closing-odds probabilities keyed by (date, home, away).
+
+    ``method`` selects the de-vig: "proportional" (default, the columns the
+    benchmark has always used) or "shin" when the newer sh/sd/sa columns are
+    present (see tools/build_odds.py). Falls back to proportional if the Shin
+    columns are absent, so older odds files still load.
+    """
     import csv
     import os
 
@@ -249,5 +255,8 @@ def _load_odds(season, cache_dir):
     with open(path, encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
             key = (datetime.date.fromisoformat(r["date"]), r["home"], r["away"])
-            odds[key] = (float(r["ph"]), float(r["pd"]), float(r["pa"]))
+            if method == "shin" and "sh" in r and r["sh"]:
+                odds[key] = (float(r["sh"]), float(r["sd"]), float(r["sa"]))
+            else:
+                odds[key] = (float(r["ph"]), float(r["pd"]), float(r["pa"]))
     return odds
