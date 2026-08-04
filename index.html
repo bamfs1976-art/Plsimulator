@@ -440,6 +440,12 @@
       <div id="acc-live-out"></div>
     </section>
     <section class="block">
+      <p class="charttitle">Biggest shocks — results that defied the model</p>
+      <p class="note" style="margin-bottom:10px">The played 2026/27 results the model rated least likely, ranked by
+        ranked-probability score (higher = a bigger upset versus what the model expected before kickoff).</p>
+      <div id="acc-shocks-out"></div>
+    </section>
+    <section class="block">
       <p class="charttitle">What was tested and rejected</p>
       <p class="note">A promoted-club correction (attack ×0.59, defence ×1.57 measured over 28 promoted seasons) —
         rejected because the multi-season joint fit already prices promotion in. Long decay half-lives — rejected,
@@ -1843,6 +1849,52 @@ function renderLedger() {
   markScrollables(box);
 }
 
+/* ---------------- biggest shocks vs the model ---------------- */
+function rpsWDL(probs, outcome) {
+  let cumP = 0, cumO = 0, err = 0;
+  for (let k = 0; k < 2; k++) { cumP += probs[k]; cumO += outcome === k ? 1 : 0; err += (cumP - cumO) ** 2; }
+  return err / 2;
+}
+function renderShocks() {
+  const box = document.getElementById("acc-shocks-out");
+  if (!box) return;
+  const cfg = ui();
+  const names = Object.keys(cfg.teams);
+  const fixtures = getFixtures(names);
+  const played = playedResultMap(fixtures);   // "md|home|away" -> [hg, ag]
+  const rows = [];
+  fixtures.forEach((md, i) => md.forEach(([h, a]) => {
+    const res = played[(i + 1) + "|" + h + "|" + a];
+    if (!res) return;
+    const [hg, ag] = res;
+    const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+    const [pH, pD, pA] = outcomeProbs(scoreGrid(lh, la, cfg.dc));
+    const outcome = hg > ag ? 0 : hg === ag ? 1 : 2;
+    rows.push({ md: i + 1, h, a, hg, ag, pH, pD, pA, outcome, rps: rpsWDL([pH, pD, pA], outcome) });
+  }));
+  if (!rows.length) {
+    box.innerHTML = '<p class="note">No 2026/27 matches played yet — the biggest upsets against the model appear here once the season kicks off.</p>';
+    return;
+  }
+  rows.sort((x, y) => y.rps - x.rps);
+  const label = o => o === 0 ? "home win" : o === 1 ? "draw" : "away win";
+  let html = '<div class="scroll"><table><thead><tr><th class="t">Match</th><th>Score</th>' +
+    '<th class="t">Model expected</th><th>Model gave it</th><th>Surprise (RPS)</th></tr></thead><tbody>';
+  rows.slice(0, 5).forEach(r => {
+    const probs = [r.pH, r.pD, r.pA];
+    const pick = probs.indexOf(Math.max(...probs));
+    html += `<tr><td class="t">${clubDot(r.h)}${esc(r.h)} v ${clubDot(r.a)}${esc(r.a)} <span class="note">MD${r.md}</span></td>` +
+      `<td>${r.hg}–${r.ag}</td>` +
+      `<td class="t">${label(pick)} ${(Math.max(...probs) * 100).toFixed(0)}%</td>` +
+      `<td>${(probs[r.outcome] * 100).toFixed(0)}%</td>` +
+      `<td style="${bar(r.rps, 0.9, 'var(--danger)')}">${r.rps.toFixed(3)}</td></tr>`;
+  });
+  html += "</tbody></table></div>" +
+    '<p class="note" style="margin-top:8px">“Model gave it” is the probability the model assigned to what actually happened — the lower that was, the bigger the shock.</p>';
+  box.innerHTML = html;
+  markScrollables(box);
+}
+
 /* ---------------- tabs & init ---------------- */
 function showTab(tab) {
   document.querySelectorAll(".tabs button").forEach(x => {
@@ -1856,7 +1908,7 @@ function showTab(tab) {
   if (tab === "md") renderMatchday();
   if (tab === "scenario") scInit();
   if (tab === "form") formInit();
-  if (tab === "acc") renderLedger();
+  if (tab === "acc") { renderLedger(); renderShocks(); }
   updateHash();
 }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
