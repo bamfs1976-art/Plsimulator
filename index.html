@@ -311,6 +311,7 @@
       <select id="model">
         <option value="poisson">Poisson attack/defence</option>
         <option value="elo">Elo-based</option>
+        <option value="blend">Poisson × Elo blend</option>
       </select></div>
     <div class="ctl check"><input type="checkbox" id="dc" checked><label for="dc">Dixon-Coles correction</label></div>
     <div class="ctl"><label for="seed">Seed</label><input type="number" id="seed" value="42"></div>
@@ -603,6 +604,13 @@ function lambdas(model, teams, home, away) {
   if (model === "poisson")
     return [BASE_H * th.attack * ta.defence * (th.home || 1),
             BASE_A * ta.attack * th.defence];
+  if (model === "blend") {
+    /* Geometric mean of the Poisson and Elo goal rates — an ensemble that
+       leans on attack/defence and Elo form together. */
+    const [ph, pa] = lambdas("poisson", teams, home, away);
+    const [eh, ea] = lambdas("elo", teams, home, away);
+    return [Math.sqrt(ph * eh), Math.sqrt(pa * ea)];
+  }
   const diff = th.elo - ta.elo + ELO_HOME;
   const exp = 1 / (1 + Math.pow(10, -diff / 400));
   const skew = ELO_SCALE * (2 * exp - 1) * LN10, half = (BASE_H + BASE_A) / 2;
@@ -618,6 +626,13 @@ function lambdaExplain(model, teams, home, away) {
     return `${home} xG ${lh.toFixed(2)} = ${BASE_H.toFixed(2)} base × ${th.attack.toFixed(2)} attack × ` +
       `${ta.defence.toFixed(2)} ${away} defence${hh !== 1 ? ` × ${hh.toFixed(2)} home` : ""}\n` +
       `${away} xG ${la.toFixed(2)} = ${BASE_A.toFixed(2)} base × ${ta.attack.toFixed(2)} attack × ${th.defence.toFixed(2)} ${home} defence`;
+  }
+  if (model === "blend") {
+    const [ph, pa] = lambdas("poisson", teams, home, away);
+    const [eh, ea] = lambdas("elo", teams, home, away);
+    return `Blend = geometric mean of Poisson and Elo\n` +
+      `${home} xG ${lh.toFixed(2)} = √(${ph.toFixed(2)} Poisson × ${eh.toFixed(2)} Elo)\n` +
+      `${away} xG ${la.toFixed(2)} = √(${pa.toFixed(2)} Poisson × ${ea.toFixed(2)} Elo)`;
   }
   const diff = th.elo - ta.elo + ELO_HOME;
   const exp = 1 / (1 + Math.pow(10, -diff / 400));
@@ -1424,7 +1439,7 @@ function hydrateFromParams() {
   };
   if (q.has("seed")) { const s = parseInt(q.get("seed"), 10); if (Number.isFinite(s)) document.getElementById("seed").value = s >>> 0; }
   if (q.has("seasons")) setOption("sims", q.get("seasons"));
-  if (q.has("model")) setOption("model", q.get("model"), ["poisson", "elo"]);
+  if (q.has("model")) setOption("model", q.get("model"), ["poisson", "elo", "blend"]);
   if (q.has("dc")) document.getElementById("dc").checked = q.get("dc") === "1" || q.get("dc") === "true";
   if (q.has("ratings")) setOption("ratings", q.get("ratings"), ["calibrated", "default"]);
   return true;
@@ -1888,7 +1903,8 @@ initInfo();
 function updateSettingsChips() {
   const box = document.getElementById("settings-chips");
   if (!box) return;
-  const model = document.getElementById("model").value === "poisson" ? "Poisson" : "Elo";
+  const mv = document.getElementById("model").value;
+  const model = mv === "poisson" ? "Poisson" : mv === "elo" ? "Elo" : "Poisson × Elo blend";
   const dcOn = document.getElementById("dc").checked;
   const ratings = document.getElementById("ratings").value === "calibrated" ? "Fitted 2023–26" : "Hand-set defaults";
   const seed = (parseInt(document.getElementById("seed").value, 10) || 42) >>> 0;

@@ -69,11 +69,32 @@ class EloModel:
         return half * math.exp(skew), half * math.exp(-skew)
 
 
+class BlendModel:
+    """Ensemble of the Poisson and Elo goal rates (geometric mean).
+
+    Leans on attack/defence multipliers and Elo form together; matches the
+    "Poisson x Elo blend" option in the web simulator.
+    """
+
+    name = "blend"
+
+    def __init__(self, teams):
+        self.poisson = PoissonModel(teams)
+        self.elo = EloModel(teams)
+
+    def lambdas(self, home, away):
+        ph, pa = self.poisson.lambdas(home, away)
+        eh, ea = self.elo.lambdas(home, away)
+        return math.sqrt(ph * eh), math.sqrt(pa * ea)
+
+
 def make_model(name, teams):
     if name == "poisson":
         return PoissonModel(teams)
     if name == "elo":
         return EloModel(teams)
+    if name == "blend":
+        return BlendModel(teams)
     raise ValueError(f"unknown model {name!r}")
 
 
