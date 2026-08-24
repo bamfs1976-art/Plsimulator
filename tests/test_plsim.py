@@ -375,8 +375,10 @@ class FormTests(unittest.TestCase):
         for f in form.values():
             for split in ("overall", "home", "away"):
                 self.assertEqual(set(f[split]), {"5", "10", "20"})
-        # A club that played a full season sums to its points.
-        played = [f for f in form.values() if f["played"] >= 20]
+        # The season-points invariant holds for every club that has played.
+        # Use played > 0 (not >= 20): once 2026/27 kicks off the form source
+        # switches to the live season, where early on no club has 20 games yet.
+        played = [f for f in form.values() if f["played"] > 0]
         self.assertTrue(played, "expected at least one club with matches")
         for f in played:
             w = f["season"]
