@@ -1,0 +1,13 @@
+[
+ {
+  "date": "2026-08-24",
+  "matches": 6,
+  "rps": 0.2562,
+  "brier": 0.5783,
+  "cumulative": {
+   "matches": 6,
+   "rps": 0.2562,
+   "brier": 0.5783
+  }
+ }
+]
