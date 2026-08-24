@@ -1,11 +1,11 @@
 """Assemble model.json — the single machine-readable model bundle.
 
-The standalone simulator, Gameweek Edge and the PL Bookings Desk all consume
-this one file, so the fitted ratings, official fixtures, recent form and
-season state never drift between the products. Written to the repo root and
-served by Netlify at https://plsimulation.netlify.app/model.json (with a
-permissive CORS header, see netlify.toml). Refreshed weekly by
-tools/weekly_update.py.
+The standalone simulator serves this one file, and the PL Bookings Desk
+ingests it at build time (baking the fitted ratings into its own model to
+weight card markets by game state). Written to the repo root and served by
+Netlify at https://plsimulation.netlify.app/model.json with a permissive
+CORS header (see netlify.toml), so any other consumer can fetch it too.
+Refreshed weekly by tools/weekly_update.py.
 
     python3 tools/build_bundle.py
 

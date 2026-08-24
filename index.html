@@ -496,19 +496,19 @@
         <li><a href="model.json"><code>/model.json</code></a> — the full model bundle: fitted team ratings, model
           constants, the official fixture list and matchday dates, recent form, weekly odds snapshots, the live
           accuracy ledger, a reliability profile, per-club season <b>stakes</b> (title/top-4/top-6/relegation odds
-          from a seeded Monte Carlo), and referee assignments when published. The same bundle powers Gameweek Edge
-          and the PL Bookings Desk.</li>
+          from a seeded Monte Carlo), and referee assignments when published. The PL Bookings Desk bakes these
+          fitted ratings into its own build; the bundle is CORS-open for any other consumer too.</li>
         <li><a href="clubs/index.json"><code>/clubs/index.json</code></a> — index of all 20 clubs with title and relegation odds.</li>
         <li><code>/clubs/&lt;slug&gt;.json</code> — one club's finishing-position distribution, title/top-4/Europe/relegation
           odds, expected points and every remaining fixture's win/draw/loss probability
           (e.g. <a href="clubs/arsenal.json"><code>/clubs/arsenal.json</code></a>).</li>
       </ul>
-      Refreshed by the Monday recalibration. The same bundle powers <a href="https://gameweekedge.netlify.app">Gameweek Edge</a>, so the numbers never drift between the two.
+      Refreshed by the Monday recalibration. The PL Bookings Desk ingests these ratings at build time to weight its card markets by expected game state.
     </div>
   </details>
   <footer class="site">
     <span>Recalibrated every Monday from real results.</span>
-    <a href="https://gameweekedge.netlify.app">Play FPL? Gameweek Edge runs this exact model →</a>
+    <a href="https://gameweekedge.netlify.app">Play FPL? Try Gameweek Edge →</a>
     <a href="https://github.com/bamfs1976-art/Plsimulator">Model &amp; code</a>
   </footer>
 </div>
@@ -2208,8 +2208,9 @@ function restoreFromHash() {
 
 /* Live model bundle: model.json is the single source of truth (published by
    the weekly job); the embedded blocks below are the offline fallback. If the
-   bundle is reachable it overrides them before the first run, so this site and
-   Gameweek Edge always show identical numbers. */
+   bundle is reachable it overrides them before the first run. It is published
+   CORS-open so other tools can consume it (the PL Bookings Desk bakes the
+   ratings in at build time). */
 function validTeams(t) {
   if (!t || typeof t !== "object" || Array.isArray(t)) return false;
   const names = Object.keys(t);

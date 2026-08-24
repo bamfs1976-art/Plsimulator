@@ -77,6 +77,9 @@ and a live self-scoring accuracy ledger.
 
 ## Cross-app opportunity
 
-`model.json` is already consumed by Gameweek Edge. Formalise it: version the schema, include
-`constants` (rho, baselines), publish a changelog, and treat this repo as the model service
-for the whole suite (Gameweek Edge fixtures/xP, Bookings Desk fixture heat).
+`model.json` is consumed by the PL Bookings Desk, which bakes the fitted ratings into its own
+build (`scripts/build-sim-model.mjs` → `data/sim_model.js`) to weight card markets by game state.
+Gameweek Edge runs its own bundled models and does **not** consume this file. Formalise the
+service: version the schema, include `constants` (rho, baselines), publish a changelog, and — if
+the intent is a shared model service — wire Bookings to refresh after the weekly refit and, should
+it be wanted, point Gameweek Edge at the bundle too.
