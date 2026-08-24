@@ -5,8 +5,8 @@
   publish = "."
   command = ""
 
-# The shared model bundle both this site and Gameweek Edge consume.
-# Public, cacheable, CORS-open so other origins can fetch it.
+# The published model bundle. Public, cacheable, CORS-open so other origins
+# can fetch it (the PL Bookings Desk ingests these ratings at build time).
 [[headers]]
   for = "/model.json"
   [headers.values]
