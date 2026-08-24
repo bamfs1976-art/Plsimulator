@@ -494,7 +494,10 @@
       Every number here is served as static JSON, CORS-open so you can build on it — no key, no rate limit.
       <ul style="margin:8px 0;padding-left:18px;line-height:1.9">
         <li><a href="model.json"><code>/model.json</code></a> — the full model bundle: fitted team ratings, model
-          constants, the official fixture list, recent form, weekly odds snapshots and the live accuracy ledger.</li>
+          constants, the official fixture list and matchday dates, recent form, weekly odds snapshots, the live
+          accuracy ledger, a reliability profile, per-club season <b>stakes</b> (title/top-4/top-6/relegation odds
+          from a seeded Monte Carlo), and referee assignments when published. The same bundle powers Gameweek Edge
+          and the PL Bookings Desk.</li>
         <li><a href="clubs/index.json"><code>/clubs/index.json</code></a> — index of all 20 clubs with title and relegation odds.</li>
         <li><code>/clubs/&lt;slug&gt;.json</code> — one club's finishing-position distribution, title/top-4/Europe/relegation
           odds, expected points and every remaining fixture's win/draw/loss probability
