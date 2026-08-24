@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="Premier League 2026/27 Simulator" width="440">
+</p>
+
 # Premier League 2026/27 Simulator
 
 A fast, zero-dependency Python simulator for the 2026/27 Premier League

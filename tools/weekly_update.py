@@ -222,10 +222,28 @@ def main():
     except Exception as exc:  # noqa: BLE001
         print(f"forecast write skipped: {exc}")
 
+    # Reliability profile from the walk-forward backtest (best effort - a
+    # calibration hiccup must not break the refit). Runs before the bundle
+    # so model.json carries the fresh numbers.
+    try:
+        subprocess.run([sys.executable, "tools/build_calibration.py"], check=True, timeout=600)
+    except Exception as exc:  # noqa: BLE001
+        print(f"calibration profile skipped: {exc}")
+
     subprocess.run([sys.executable, "tools/snapshot_history.py"], check=True)
     subprocess.run([sys.executable, "tools/embed_calibrated.py"], check=True)
     subprocess.run([sys.executable, "tools/build_form.py"], check=True)
     subprocess.run([sys.executable, "tools/build_bundle.py"], check=True)
+
+    # Regenerate the SEO surfaces from the fresh bundle: the per-club
+    # routes and the sitemap (best effort - a static-page glitch must
+    # never break the weekly refit). The Open Graph image needs a
+    # headless browser, so it is regenerated out of band, not here.
+    for step in (["tools/build_clubs.py"], ["tools/build_sitemap.py"]):
+        try:
+            subprocess.run([sys.executable, *step], check=True, timeout=600)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{step[0]} skipped: {exc}")
     print("done")
 
 

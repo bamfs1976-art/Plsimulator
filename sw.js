@@ -8,9 +8,10 @@
  * fallback, so shell + model.json is a complete offline experience.
  */
 "use strict";
-const CACHE = "plsim-v1";
-const SHELL = ["./", "./index.html", "./model.json"];
-const STATIC = ["./icon-192.png", "./icon-512.png", "./manifest.webmanifest"];
+const CACHE = "plsim-v3";
+const SHELL = ["./", "./index.html", "./model.json", "./og-render.js"];
+const STATIC = ["./icon-192.png", "./icon-512.png", "./apple-touch-icon.png",
+  "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE)
@@ -49,9 +50,9 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
   const p = url.pathname;
-  if (p.endsWith("/") || p.endsWith("/index.html") || p.endsWith("/model.json")) {
+  if (p.endsWith("/") || p.endsWith("/index.html") || p.endsWith("/model.json") || p.endsWith("/og-render.js")) {
     e.respondWith(networkFirst(e.request));
-  } else if (/\/(icon-192\.png|icon-512\.png|manifest\.webmanifest)$/.test(p)) {
+  } else if (/\/(icon-192\.png|icon-512\.png|apple-touch-icon\.png|favicon\.svg|manifest\.webmanifest)$/.test(p)) {
     e.respondWith(cacheFirst(e.request));
   }
 });
