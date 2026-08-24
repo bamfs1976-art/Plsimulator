@@ -386,6 +386,50 @@ class FormTests(unittest.TestCase):
             self.assertLessEqual(w["ppg"], 3.0)
 
 
+class RealFixtureTests(unittest.TestCase):
+    def test_fixtures_load_once_season_is_under_way(self):
+        """The published fixture list must still load after results appear.
+
+        Regression: parse_fixtures only yields scoreless lines, so once a
+        matchday is played load_real_fixtures used to see < 10 fixtures for
+        it and return None (the site then fell back to a generated calendar).
+        """
+        import os
+        import re
+        import tempfile
+        from plsim.fixtures import load_real_fixtures
+        from plsim.teams import load_teams
+
+        src = os.path.join("data", "2026-27-1-premierleague.txt")
+        if not os.path.exists(src):
+            self.skipTest("no cached 2026-27 fixtures")
+        names = list(load_teams())
+        baseline = load_real_fixtures(names)
+        self.assertIsNotNone(baseline, "pre-season fixtures should load")
+
+        # Mark matchday 1 as played by appending scores (openfootball style).
+        md, n, out = 0, 0, []
+        for ln in open(src, encoding="utf-8").read().splitlines():
+            m = re.search(r"Matchday\s+(\d+)", ln)
+            if m:
+                md = int(m.group(1))
+            if md == 1 and " v " in ln and not re.search(r"\d-\d", ln):
+                ln = ln.rstrip() + f"  {n % 3}-{(n + 1) % 3} (0-0)"
+                n += 1
+            out.append(ln)
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "2026-27-1-premierleague.txt"), "w",
+                      encoding="utf-8") as fh:
+                fh.write("\n".join(out))
+            played = load_real_fixtures(names, cache_dir=d)
+        self.assertIsNotNone(played, "fixtures must still load after MD1 is played")
+        self.assertEqual(len(played[0]), 38)
+        self.assertTrue(all(len(x) == 10 for x in played[0]))
+        # Same fixtures as the scoreless baseline, just some now carrying results.
+        as_set = lambda r: {(i, h, a) for i, mdx in enumerate(r[0]) for h, a in mdx}
+        self.assertEqual(as_set(played), as_set(baseline))
+
+
 class LedgerTests(unittest.TestCase):
     FORECASTS = {
         "date": "2026-08-17", "season": "2026-27", "model": "poisson+dc",

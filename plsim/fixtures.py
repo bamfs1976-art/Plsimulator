@@ -56,7 +56,7 @@ def load_real_fixtures(team_names, season="2026-27", cache_dir="data"):
     """
     import os
 
-    from .calibrate import DIVISION_FILES, NAME_MAP, parse_fixtures
+    from .calibrate import DIVISION_FILES, NAME_MAP, parse_fixtures, parse_matches
 
     path = os.path.join(cache_dir, f"{season}-{DIVISION_FILES[1]}")
     if not os.path.exists(path):
@@ -66,13 +66,30 @@ def load_real_fixtures(team_names, season="2026-27", cache_dir="data"):
     names = set(team_names)
     matchdays = {}
     md_dates = {}
-    for md, date, home, away in parse_fixtures(text, season):
+    seen = set()
+
+    def add(md, date, home, away):
+        """Record one fixture; returns False on an unexpected team/matchday."""
         h, a = NAME_MAP.get(home), NAME_MAP.get(away)
         if h not in names or a not in names or not 1 <= md <= 38:
-            return None
-        matchdays.setdefault(md, []).append((h, a))
+            return False
+        key = (md, h, a)
+        if key not in seen:
+            seen.add(key)
+            matchdays.setdefault(md, []).append((h, a))
         if date and md not in md_dates:
             md_dates[md] = date
+        return True
+
+    # The full fixture list is the union of already-played matches (which
+    # carry scores) and still-scheduled fixtures. Once the season is under
+    # way neither source alone covers a matchday, so read both.
+    for md, date, home, away, _hg, _ag in parse_matches(text, season):
+        if not add(md, date, home, away):
+            return None
+    for md, date, home, away in parse_fixtures(text, season):
+        if not add(md, date, home, away):
+            return None
     if sorted(matchdays) != list(range(1, 39)) or any(
             len(v) != 10 for v in matchdays.values()):
         return None
