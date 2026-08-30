@@ -9,5 +9,16 @@
    "rps": 0.2562,
    "brier": 0.5783
   }
+ },
+ {
+  "date": "2026-08-30",
+  "matches": 4,
+  "rps": 0.1913,
+  "brier": 0.5747,
+  "cumulative": {
+   "matches": 10,
+   "rps": 0.2302,
+   "brier": 0.5769
+  }
  }
 ]
