@@ -1048,5 +1048,110 @@
     "rel": 89.78
    }
   }
+ },
+ {
+  "date": "2026-09-07",
+  "clubs": {
+   "Arsenal": {
+    "title": 36.81,
+    "top4": 81.15,
+    "rel": 0.0
+   },
+   "Manchester City": {
+    "title": 32.03,
+    "top4": 77.62,
+    "rel": 0.03
+   },
+   "Liverpool": {
+    "title": 7.41,
+    "top4": 41.22,
+    "rel": 0.56
+   },
+   "Manchester United": {
+    "title": 3.55,
+    "top4": 28.02,
+    "rel": 1.39
+   },
+   "Chelsea": {
+    "title": 4.04,
+    "top4": 28.63,
+    "rel": 1.46
+   },
+   "Aston Villa": {
+    "title": 1.01,
+    "top4": 10.52,
+    "rel": 5.92
+   },
+   "Newcastle United": {
+    "title": 3.1,
+    "top4": 24.53,
+    "rel": 1.78
+   },
+   "Tottenham Hotspur": {
+    "title": 0.06,
+    "top4": 1.76,
+    "rel": 25.39
+   },
+   "Crystal Palace": {
+    "title": 0.18,
+    "top4": 4.03,
+    "rel": 13.75
+   },
+   "Brighton": {
+    "title": 3.61,
+    "top4": 25.53,
+    "rel": 1.68
+   },
+   "Nottingham Forest": {
+    "title": 0.47,
+    "top4": 6.54,
+    "rel": 8.58
+   },
+   "Bournemouth": {
+    "title": 2.08,
+    "top4": 18.92,
+    "rel": 2.82
+   },
+   "Brentford": {
+    "title": 3.23,
+    "top4": 23.93,
+    "rel": 1.89
+   },
+   "Fulham": {
+    "title": 0.47,
+    "top4": 5.91,
+    "rel": 10.12
+   },
+   "Everton": {
+    "title": 0.65,
+    "top4": 7.6,
+    "rel": 7.85
+   },
+   "Sunderland": {
+    "title": 0.07,
+    "top4": 1.07,
+    "rel": 32.46
+   },
+   "Leeds United": {
+    "title": 1.2,
+    "top4": 12.18,
+    "rel": 4.78
+   },
+   "Coventry City": {
+    "title": 0.03,
+    "top4": 0.66,
+    "rel": 37.51
+   },
+   "Ipswich Town": {
+    "title": 0.0,
+    "top4": 0.17,
+    "rel": 56.62
+   },
+   "Hull City": {
+    "title": 0.0,
+    "top4": 0.01,
+    "rel": 85.41
+   }
+  }
  }
 ]

@@ -1,167 +1,167 @@
 {
- "date": "2026-08-31",
+ "date": "2026-09-07",
  "season": "2026-27",
  "model": "poisson+dc",
  "fixtures": [
   {
-   "md": 2,
-   "home": "Crystal Palace",
-   "away": "Manchester City",
-   "ph": 0.2856,
-   "pd": 0.2694,
-   "pa": 0.4449
-  },
-  {
-   "md": 2,
-   "home": "Liverpool",
-   "away": "Nottingham Forest",
-   "ph": 0.491,
-   "pd": 0.2548,
-   "pa": 0.2542
-  },
-  {
-   "md": 2,
-   "home": "Bournemouth",
-   "away": "Everton",
-   "ph": 0.4492,
-   "pd": 0.2785,
-   "pa": 0.2723
-  },
-  {
-   "md": 2,
-   "home": "Coventry City",
-   "away": "Hull City",
-   "ph": 0.5424,
-   "pd": 0.2466,
-   "pa": 0.211
-  },
-  {
-   "md": 2,
-   "home": "Tottenham Hotspur",
-   "away": "Newcastle United",
-   "ph": 0.368,
-   "pd": 0.2759,
-   "pa": 0.3561
-  },
-  {
-   "md": 2,
-   "home": "Sunderland",
-   "away": "Fulham",
-   "ph": 0.3473,
-   "pd": 0.3033,
-   "pa": 0.3494
-  },
-  {
-   "md": 2,
-   "home": "Chelsea",
-   "away": "Brighton",
-   "ph": 0.4112,
-   "pd": 0.2675,
-   "pa": 0.3213
-  },
-  {
-   "md": 2,
-   "home": "Leeds United",
-   "away": "Brentford",
-   "ph": 0.4322,
-   "pd": 0.2693,
-   "pa": 0.2985
-  },
-  {
-   "md": 2,
-   "home": "Manchester United",
-   "away": "Ipswich Town",
-   "ph": 0.5967,
-   "pd": 0.2248,
-   "pa": 0.1785
-  },
-  {
-   "md": 2,
-   "home": "Aston Villa",
-   "away": "Arsenal",
-   "ph": 0.2892,
-   "pd": 0.2756,
-   "pa": 0.4351
-  },
-  {
    "md": 3,
    "home": "Ipswich Town",
    "away": "Liverpool",
-   "ph": 0.2507,
-   "pd": 0.2486,
-   "pa": 0.5006
+   "ph": 0.2468,
+   "pd": 0.2412,
+   "pa": 0.512
   },
   {
    "md": 3,
    "home": "Newcastle United",
    "away": "Bournemouth",
-   "ph": 0.4495,
-   "pd": 0.2495,
-   "pa": 0.301
+   "ph": 0.4573,
+   "pd": 0.2491,
+   "pa": 0.2936
   },
   {
    "md": 3,
    "home": "Nottingham Forest",
    "away": "Tottenham Hotspur",
-   "ph": 0.4221,
-   "pd": 0.2877,
-   "pa": 0.2902
+   "ph": 0.4322,
+   "pd": 0.285,
+   "pa": 0.2828
   },
   {
    "md": 3,
    "home": "Manchester City",
    "away": "Coventry City",
-   "ph": 0.6579,
-   "pd": 0.2017,
-   "pa": 0.1404
+   "ph": 0.6647,
+   "pd": 0.1982,
+   "pa": 0.1371
   },
   {
    "md": 3,
    "home": "Brighton",
    "away": "Leeds United",
-   "ph": 0.4728,
-   "pd": 0.2698,
-   "pa": 0.2575
+   "ph": 0.4685,
+   "pd": 0.2665,
+   "pa": 0.265
   },
   {
    "md": 3,
    "home": "Brentford",
    "away": "Sunderland",
-   "ph": 0.56,
-   "pd": 0.2504,
-   "pa": 0.1896
+   "ph": 0.5551,
+   "pd": 0.2525,
+   "pa": 0.1924
   },
   {
    "md": 3,
    "home": "Fulham",
    "away": "Crystal Palace",
-   "ph": 0.4307,
-   "pd": 0.2781,
-   "pa": 0.2912
+   "ph": 0.4408,
+   "pd": 0.2738,
+   "pa": 0.2855
   },
   {
    "md": 3,
    "home": "Hull City",
    "away": "Aston Villa",
-   "ph": 0.2485,
-   "pd": 0.2658,
-   "pa": 0.4857
+   "ph": 0.2593,
+   "pd": 0.2716,
+   "pa": 0.4691
   },
   {
    "md": 3,
    "home": "Everton",
    "away": "Manchester United",
-   "ph": 0.3923,
-   "pd": 0.2818,
-   "pa": 0.3259
+   "ph": 0.3934,
+   "pd": 0.2776,
+   "pa": 0.329
   },
   {
    "md": 3,
    "home": "Arsenal",
    "away": "Chelsea",
-   "ph": 0.5284,
-   "pd": 0.2526,
-   "pa": 0.219
+   "ph": 0.5381,
+   "pd": 0.2472,
+   "pa": 0.2147
+  },
+  {
+   "md": 4,
+   "home": "Crystal Palace",
+   "away": "Ipswich Town",
+   "ph": 0.507,
+   "pd": 0.2541,
+   "pa": 0.2389
+  },
+  {
+   "md": 4,
+   "home": "Liverpool",
+   "away": "Fulham",
+   "ph": 0.5258,
+   "pd": 0.2496,
+   "pa": 0.2247
+  },
+  {
+   "md": 4,
+   "home": "Aston Villa",
+   "away": "Nottingham Forest",
+   "ph": 0.4243,
+   "pd": 0.2693,
+   "pa": 0.3064
+  },
+  {
+   "md": 4,
+   "home": "Bournemouth",
+   "away": "Brentford",
+   "ph": 0.4211,
+   "pd": 0.2695,
+   "pa": 0.3094
+  },
+  {
+   "md": 4,
+   "home": "Chelsea",
+   "away": "Hull City",
+   "ph": 0.6556,
+   "pd": 0.2043,
+   "pa": 0.14
+  },
+  {
+   "md": 4,
+   "home": "Tottenham Hotspur",
+   "away": "Everton",
+   "ph": 0.3658,
+   "pd": 0.292,
+   "pa": 0.3421
+  },
+  {
+   "md": 4,
+   "home": "Sunderland",
+   "away": "Arsenal",
+   "ph": 0.2109,
+   "pd": 0.2872,
+   "pa": 0.5019
+  },
+  {
+   "md": 4,
+   "home": "Coventry City",
+   "away": "Brighton",
+   "ph": 0.3017,
+   "pd": 0.2607,
+   "pa": 0.4376
+  },
+  {
+   "md": 4,
+   "home": "Manchester United",
+   "away": "Manchester City",
+   "ph": 0.3668,
+   "pd": 0.2504,
+   "pa": 0.3828
+  },
+  {
+   "md": 4,
+   "home": "Leeds United",
+   "away": "Newcastle United",
+   "ph": 0.4328,
+   "pd": 0.2703,
+   "pa": 0.297
   }
  ]
 }
