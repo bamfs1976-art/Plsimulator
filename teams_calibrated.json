@@ -1,132 +1,132 @@
 {
   "Arsenal": {
-    "attack": 1.1319,
-    "defence": 0.726,
-    "home": 1.0003,
-    "elo": 1891.4
+    "attack": 1.1158,
+    "defence": 0.7427,
+    "home": 1.0217,
+    "elo": 1883.7
   },
   "Manchester City": {
-    "attack": 1.2417,
-    "defence": 0.848,
-    "home": 0.9688,
-    "elo": 1862.7
+    "attack": 1.2599,
+    "defence": 0.8617,
+    "home": 1.0224,
+    "elo": 1878.9
   },
   "Liverpool": {
-    "attack": 1.1701,
-    "defence": 0.9607,
-    "home": 0.9702,
-    "elo": 1759.4
+    "attack": 1.1461,
+    "defence": 0.9246,
+    "home": 0.9598,
+    "elo": 1767.8
   },
   "Manchester United": {
-    "attack": 1.0609,
-    "defence": 1.0043,
-    "home": 1.0962,
-    "elo": 1779.5
+    "attack": 1.0492,
+    "defence": 0.9872,
+    "home": 1.0865,
+    "elo": 1766.5
   },
   "Chelsea": {
-    "attack": 1.147,
-    "defence": 1.0128,
-    "home": 0.9534,
-    "elo": 1713.5
+    "attack": 1.1176,
+    "defence": 1.0422,
+    "home": 0.9792,
+    "elo": 1701.0
   },
   "Aston Villa": {
-    "attack": 0.9037,
-    "defence": 0.9868,
-    "home": 1.0819,
-    "elo": 1738.3
+    "attack": 0.9485,
+    "defence": 1.0069,
+    "home": 1.0451,
+    "elo": 1732.0
   },
   "Newcastle United": {
-    "attack": 1.0005,
-    "defence": 0.9907,
-    "home": 1.1343,
-    "elo": 1696.5
+    "attack": 1.0042,
+    "defence": 1.0279,
+    "home": 1.1355,
+    "elo": 1698.5
   },
   "Tottenham Hotspur": {
-    "attack": 0.8465,
-    "defence": 1.0521,
-    "home": 0.9861,
-    "elo": 1596.7
+    "attack": 0.8491,
+    "defence": 1.0607,
+    "home": 0.9859,
+    "elo": 1588.0
   },
   "Crystal Palace": {
-    "attack": 0.9567,
-    "defence": 1.0427,
-    "home": 0.942,
-    "elo": 1661.7
+    "attack": 0.9415,
+    "defence": 1.0465,
+    "home": 0.967,
+    "elo": 1654.6
   },
   "Brighton": {
-    "attack": 1.078,
-    "defence": 0.9772,
-    "home": 0.9661,
-    "elo": 1712.6
+    "attack": 1.18,
+    "defence": 0.9423,
+    "home": 0.9519,
+    "elo": 1743.6
   },
   "Nottingham Forest": {
-    "attack": 0.9615,
-    "defence": 0.9584,
-    "home": 0.8285,
-    "elo": 1676.2
+    "attack": 0.9696,
+    "defence": 0.9535,
+    "home": 0.8008,
+    "elo": 1679.6
   },
   "Bournemouth": {
-    "attack": 1.0945,
-    "defence": 0.9853,
-    "home": 0.8997,
-    "elo": 1749.2
+    "attack": 1.0897,
+    "defence": 0.9854,
+    "home": 0.8972,
+    "elo": 1732.3
   },
   "Brentford": {
-    "attack": 0.9963,
-    "defence": 0.9795,
-    "home": 1.0992,
-    "elo": 1718.2
+    "attack": 1.033,
+    "defence": 0.9652,
+    "home": 1.102,
+    "elo": 1730.8
   },
   "Fulham": {
-    "attack": 0.8781,
-    "defence": 1.017,
-    "home": 1.0635,
-    "elo": 1651.1
+    "attack": 0.8557,
+    "defence": 0.9862,
+    "home": 1.0819,
+    "elo": 1658.3
   },
   "Everton": {
-    "attack": 0.8784,
-    "defence": 0.952,
-    "home": 1.0364,
-    "elo": 1689.2
+    "attack": 0.8476,
+    "defence": 0.9229,
+    "home": 1.0531,
+    "elo": 1699.0
   },
   "Sunderland": {
-    "attack": 0.7475,
-    "defence": 0.9774,
-    "home": 0.9904,
-    "elo": 1709.3
+    "attack": 0.7927,
+    "defence": 1.0285,
+    "home": 0.9433,
+    "elo": 1696.3
   },
   "Leeds United": {
-    "attack": 0.9087,
-    "defence": 0.9463,
-    "home": 1.0804,
-    "elo": 1753.3
+    "attack": 0.9197,
+    "defence": 0.9234,
+    "home": 1.0951,
+    "elo": 1755.9
   },
   "Coventry City": {
-    "attack": 0.8504,
-    "defence": 1.1207,
-    "home": 1.0017,
-    "elo": 1748.3
+    "attack": 0.8412,
+    "defence": 1.1503,
+    "home": 0.9939,
+    "elo": 1745.8
   },
   "Ipswich Town": {
-    "attack": 0.8431,
-    "defence": 1.2246,
-    "home": 0.9436,
-    "elo": 1704.6
+    "attack": 0.8567,
+    "defence": 1.2176,
+    "home": 0.9349,
+    "elo": 1706.3
   },
   "Hull City": {
-    "attack": 0.7129,
-    "defence": 1.2375,
-    "home": 0.9573,
-    "elo": 1688.1
+    "attack": 0.7278,
+    "defence": 1.2241,
+    "home": 0.9427,
+    "elo": 1681.0
   },
   "_meta": {
-    "rho": -0.1009,
+    "rho": -0.0905,
     "seasons": [
       "2024-25",
       "2025-26",
       "2026-27"
     ],
-    "matches": 1954,
+    "matches": 2009,
     "half_life_days": 250,
     "note": "Written by the weekly recalibration job (tools/weekly_update.py); seasons/matches reflect its rolling window, not the README's default 2023-26 fit."
   }
