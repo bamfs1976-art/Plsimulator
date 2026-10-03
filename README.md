@@ -173,6 +173,29 @@ season steps on the holdout, and keeps working mid-season), a
 than the textbook -0.12), and **per-club home advantage** (mean 1.0,
 shrunk toward neutral; e.g. Newcastle fit ~1.19 at home vs Forest ~0.79).
 
+**Shrinkage and half-life, tested with a confidence interval (October
+2026).** `plsim.backtest` never tested how hard `calibrate()` shrinks each
+club towards average, because its variants skip that step.
+`tools/backtest_shrink.py` replays the season the way `calibrate()`
+serves ratings, shrink and renormalise included, over all 1,140 matches of
+2023/24 to 2025/26. Every setting is compared on the same matches, with a
+95% interval from resampling whole matchdays, and a change counts only
+when the whole interval is below zero.
+
+| Change (RPS, lower is better) | Difference | 95% interval |
+|---|---|---|
+| Shrink 15 → 10 pseudo-matches | −0.0012 | −0.0018 to −0.0007 |
+| **Shrink 15 → 5 (now the default)** | **−0.0023** | **−0.0036 to −0.0011** |
+| Shrink 15 → 0 | −0.0031 | −0.0053 to −0.0010 |
+| Half-life 250 → 365 days (Prem Predict's setting) | −0.0005 | −0.0011 to +0.0001 |
+| Half-life 250 → 550 days | −0.0007 | −0.0018 to +0.0004 |
+
+The half-life stays at 250 days: longer ones do not clear the noise. Less
+shrinkage helps on 2023/24 and 2024/25 and ties on 2025/26 at every
+setting; 5 is the default because going lower adds little and does
+slightly worse than 5 on the most recent season, while 5 keeps some
+protection for clubs with little data.
+
 ## Calibrating ratings from real results
 
 `python3 -m plsim calibrate` fits all three rating columns from actual
@@ -191,7 +214,7 @@ match data instead of the hand-set defaults:
   the clubs that moved between divisions. Matches decay exponentially by
   date (250-day half-life, backtest-validated), and each club's rating
   is shrunk toward league-average in proportion to its weighted match
-  count.
+  count (50/50 at 5 weighted matches, backtest-validated).
 - **Home** is each club's fitted home-advantage multiplier, shrunk
   toward 1.0 by 12 pseudo-matches.
 - **Rho**, the Dixon-Coles correlation, is fitted by maximum likelihood

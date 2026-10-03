@@ -37,7 +37,12 @@ DIVISION_FILES = {1: "1-premierleague.txt", 2: "2-championship.txt"}
 DEFAULT_SEASONS = ("2023-24", "2024-25", "2025-26")
 DECAY_HALF_LIFE_DAYS = 250  # weight halves every ~8 months (backtest-validated)
 FIT_ITERATIONS = 60
-SHRINK_MATCHES = 15.0       # weighted matches at which att/def shrinkage is 50/50
+# Weighted matches at which att/def shrinkage is 50/50. Was 15; at 5 the
+# walk-forward RPS improves by 0.0023 (95% interval -0.0036 to -0.0011,
+# 114 matchdays, 2023-26) and no season gets worse. Less still (2, 0) scores
+# little more on average and slightly worse than 5 on 2025-26, and 5 keeps some
+# protection for clubs with little data. See tools/backtest_shrink.py.
+SHRINK_MATCHES = 5.0
 HOME_PRIOR_MATCHES = 12.0   # pseudo-matches anchoring each club's home factor at 1.0
 RHO_RANGE = (-0.30, 0.10)   # search window for the Dixon-Coles correlation
 XG_ALPHA = 0.4              # xG share of the fit target (backtest-validated)
