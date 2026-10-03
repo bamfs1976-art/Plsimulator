@@ -1,121 +1,121 @@
 {
   "Arsenal": {
-    "attack": 1.1158,
-    "defence": 0.7427,
+    "attack": 1.1463,
+    "defence": 0.6498,
     "home": 1.0217,
     "elo": 1883.7
   },
   "Manchester City": {
-    "attack": 1.2599,
-    "defence": 0.8617,
+    "attack": 1.3215,
+    "defence": 0.812,
     "home": 1.0224,
     "elo": 1878.9
   },
   "Liverpool": {
-    "attack": 1.1461,
-    "defence": 0.9246,
+    "attack": 1.1831,
+    "defence": 0.8973,
     "home": 0.9598,
     "elo": 1767.8
   },
   "Manchester United": {
-    "attack": 1.0492,
-    "defence": 0.9872,
+    "attack": 1.065,
+    "defence": 0.9823,
     "home": 1.0865,
     "elo": 1766.5
   },
   "Chelsea": {
-    "attack": 1.1176,
-    "defence": 1.0422,
+    "attack": 1.1484,
+    "defence": 1.057,
     "home": 0.9792,
     "elo": 1701.0
   },
   "Aston Villa": {
-    "attack": 0.9485,
-    "defence": 1.0069,
+    "attack": 0.9423,
+    "defence": 1.0091,
     "home": 1.0451,
     "elo": 1732.0
   },
   "Newcastle United": {
-    "attack": 1.0042,
-    "defence": 1.0279,
+    "attack": 1.0101,
+    "defence": 1.0377,
     "home": 1.1355,
     "elo": 1698.5
   },
   "Tottenham Hotspur": {
-    "attack": 0.8491,
-    "defence": 1.0607,
+    "attack": 0.8212,
+    "defence": 1.0822,
     "home": 0.9859,
     "elo": 1588.0
   },
   "Crystal Palace": {
-    "attack": 0.9415,
-    "defence": 1.0465,
+    "attack": 0.9336,
+    "defence": 1.0631,
     "home": 0.967,
     "elo": 1654.6
   },
   "Brighton": {
-    "attack": 1.18,
-    "defence": 0.9423,
+    "attack": 1.2244,
+    "defence": 0.9212,
     "home": 0.9519,
     "elo": 1743.6
   },
   "Nottingham Forest": {
-    "attack": 0.9696,
-    "defence": 0.9535,
+    "attack": 0.968,
+    "defence": 0.9365,
     "home": 0.8008,
     "elo": 1679.6
   },
   "Bournemouth": {
-    "attack": 1.0897,
-    "defence": 0.9854,
+    "attack": 1.1144,
+    "defence": 0.9798,
     "home": 0.8972,
     "elo": 1732.3
   },
   "Brentford": {
-    "attack": 1.033,
-    "defence": 0.9652,
+    "attack": 1.0452,
+    "defence": 0.9524,
     "home": 1.102,
     "elo": 1730.8
   },
   "Fulham": {
-    "attack": 0.8557,
-    "defence": 0.9862,
+    "attack": 0.8292,
+    "defence": 0.9809,
     "home": 1.0819,
     "elo": 1658.3
   },
   "Everton": {
-    "attack": 0.8476,
-    "defence": 0.9229,
+    "attack": 0.8193,
+    "defence": 0.895,
     "home": 1.0531,
     "elo": 1699.0
   },
   "Sunderland": {
-    "attack": 0.7927,
-    "defence": 1.0285,
+    "attack": 0.7525,
+    "defence": 1.0402,
     "home": 0.9433,
     "elo": 1696.3
   },
   "Leeds United": {
-    "attack": 0.9197,
-    "defence": 0.9234,
+    "attack": 0.9062,
+    "defence": 0.8983,
     "home": 1.0951,
     "elo": 1755.9
   },
   "Coventry City": {
-    "attack": 0.8412,
-    "defence": 1.1503,
+    "attack": 0.8103,
+    "defence": 1.206,
     "home": 0.9939,
     "elo": 1745.8
   },
   "Ipswich Town": {
-    "attack": 0.8567,
-    "defence": 1.2176,
+    "attack": 0.8291,
+    "defence": 1.2953,
     "home": 0.9349,
     "elo": 1706.3
   },
   "Hull City": {
-    "attack": 0.7278,
-    "defence": 1.2241,
+    "attack": 0.6756,
+    "defence": 1.3038,
     "home": 0.9427,
     "elo": 1681.0
   },
