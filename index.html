@@ -1574,6 +1574,9 @@ function toggleMdDetail(row, cfg) {
   if (next && next.classList.contains("md-detail")) { next.remove(); return; }
   document.querySelectorAll("#md-out tr.md-detail").forEach(r => r.remove());
   const h = row.dataset.h, a = row.dataset.a;
+  const fixtures = getFixtures(Object.keys(cfg.teams));
+  const md = Math.min(38, Math.max(1, parseInt(document.getElementById("mdnum").value, 10) || 1));
+  const realRes = playedResultMap(fixtures)[md + "|" + h + "|" + a];
   const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
   const grid = scoreGrid(lh, la, cfg.dc);
   const M = goalMarkets(grid);
@@ -1592,8 +1595,108 @@ function toggleMdDetail(row, cfg) {
   tr.className = "md-detail";
   tr.innerHTML = `<td colspan="9" style="background:var(--surface-2)"><div style="display:flex;gap:24px;flex-wrap:wrap;padding:8px 4px">` +
     `<div><p class="charttitle">Correct score</p>${scoreHeatSVG(grid, h, a)}</div>` +
-    `<div style="min-width:220px"><p class="charttitle">Goal markets</p>${markets}</div></div></td>`;
+    `<div style="min-width:220px"><p class="charttitle">Goal markets</p>${markets}</div>` +
+    `<div style="min-width:240px"><p class="charttitle">Odds impact</p><div class="md-swing-slot"></div></div></div></td>`;
   row.after(tr);
+  const slot = tr.querySelector(".md-swing-slot");
+  if (slot) {
+    if (realRes) {
+      slot.innerHTML = `<p class="note" style="font-size:12px">Result already in — <b>${esc(h)} ${realRes[0]}–${realRes[1]} ${esc(a)}</b>. ` +
+        `This fixture is locked into the live odds, so there is no swing to show.</p>`;
+    } else {
+      wireMdSwing(slot, cfg, fixtures, md, h, a);
+    }
+  }
+}
+/* Odds-impact ("swing") for one upcoming fixture: how pinning it to a home
+   win / draw / away win moves each club's title, top-4 and relegation odds.
+   Reuses the Scenario engine unchanged. The three runs share one seed
+   (common random numbers) so a swing reflects the pinned result, not RNG
+   noise; the baseline is the outcome-probability-weighted average of the
+   three, so the swings are coherent and need no separate fourth run. */
+const SWING_SIMS = 4000;
+function mdOddsSwing(cfg, fixtures, md, h, a, nSims, els, onDone) {
+  const names = Object.keys(cfg.teams);
+  const [lh, la] = lambdas(cfg.model, cfg.teams, h, a);
+  const [pH, pD, pA] = outcomeProbs(scoreGrid(lh, la, cfg.dc));
+  const probs = { H: pH, D: pD, A: pA };
+  const outcomes = ["H", "D", "A"];
+  const counts = {};
+  const seed = (cfg.seed ^ (md * 131 + 7)) >>> 0;
+  let oi = 0;
+  (function next() {
+    if (oi >= outcomes.length) { finish(); return; }
+    const kind = outcomes[oi];
+    if (els && els.onStep) els.onStep(kind, oi + 1);
+    if (els && els.bars && els.bars.prog) els.bars.prog.style.display = "block";
+    const grids = buildScenarioGrids(cfg, fixtures, [{ md, h, a, kind }]);
+    runChunked(grids, names, nSims, seed, els && els.bars, (posCounts) => {
+      counts[kind] = posCounts; oi++; next();
+    });
+  })();
+  function finish() {
+    const metric = (pc, t, a1, b1) => { let s = 0; for (let i = a1 - 1; i < b1; i++) s += pc[t][i]; return s / nSims; };
+    const forClub = t => {
+      const per = {};
+      outcomes.forEach(k => per[k] = {
+        title: metric(counts[k], t, 1, 1),
+        top4: metric(counts[k], t, 1, 4),
+        rel: metric(counts[k], t, 18, 20),
+      });
+      const base = {
+        title: pH * per.H.title + pD * per.D.title + pA * per.A.title,
+        top4: pH * per.H.top4 + pD * per.D.top4 + pA * per.A.top4,
+        rel: pH * per.H.rel + pD * per.D.rel + pA * per.A.rel,
+      };
+      return { per, base };
+    };
+    onDone({ h: forClub(h), a: forClub(a), probs });
+  }
+}
+function renderMdSwing(slot, h, a, data) {
+  const pc = v => (v * 100).toFixed(1);
+  const dcell = (val, base, danger) => {
+    const delta = (val - base) * 100;
+    let d = "";
+    if (Math.abs(delta) >= 0.05) {
+      const good = danger ? delta < 0 : delta > 0;
+      d = ` <span style="color:${good ? 'var(--series-2)' : 'var(--danger)'};font-size:.85em">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</span>`;
+    }
+    return pc(val) + d;
+  };
+  const clubTable = (name, club) => {
+    let t = `<p class="charttitle" style="margin-top:6px">${clubDot(name)}${esc(name)}</p>` +
+      `<table style="font-size:13px"><thead><tr><th class="t">Outcome</th><th>Title</th><th>Top 4</th><th>Rel</th></tr></thead><tbody>` +
+      `<tr><td class="t">Baseline</td><td>${pc(club.base.title)}</td><td>${pc(club.base.top4)}</td><td>${pc(club.base.rel)}</td></tr>`;
+    [["H", esc(h) + " win"], ["D", "Draw"], ["A", esc(a) + " win"]].forEach(([k, lab]) => {
+      const m = club.per[k];
+      t += `<tr><td class="t">${lab}</td><td>${dcell(m.title, club.base.title, false)}</td>` +
+        `<td>${dcell(m.top4, club.base.top4, false)}</td><td>${dcell(m.rel, club.base.rel, true)}</td></tr>`;
+    });
+    return t + "</tbody></table>";
+  };
+  slot.innerHTML = clubTable(h, data.h) + clubTable(a, data.a) +
+    `<p class="note" style="font-size:11px;margin-top:6px">Δ vs this fixture's probability-weighted baseline ` +
+    `(model ${(data.probs.H * 100).toFixed(0)}/${(data.probs.D * 100).toFixed(0)}/${(data.probs.A * 100).toFixed(0)} home/draw/away). ` +
+    `Green helps the club, red hurts. Rel = bottom-three finish.</p>`;
+}
+function wireMdSwing(slot, cfg, fixtures, md, h, a) {
+  slot.innerHTML = `<button type="button" class="md-swing-go">Show odds impact</button>` +
+    `<p class="note" style="font-size:11px;margin-top:6px">Runs ${SWING_SIMS.toLocaleString()}×3 quick seasons, pinning this match to each result, ` +
+    `to show how it moves both clubs' title, top-4 and relegation odds.</p>`;
+  slot.querySelector(".md-swing-go").onclick = function () {
+    const label = document.createElement("div"); label.className = "note"; label.style.fontSize = "11px";
+    const prog = document.createElement("div"); prog.className = "prog"; prog.style.display = "block";
+    prog.innerHTML = "<div></div>";
+    const status = document.createElement("div"); status.className = "note"; status.style.fontSize = "11px";
+    slot.innerHTML = "";
+    slot.append(label, prog, status);
+    const outLabel = k => k === "H" ? esc(h) + " win" : k === "A" ? esc(a) + " win" : "draw";
+    mdOddsSwing(cfg, fixtures, md, h, a, SWING_SIMS, {
+      bars: { bar: prog.firstElementChild, status, prog },
+      onStep: (k, i) => { label.textContent = `Computing — ${i} of 3 (${outLabel(k)})`; },
+    }, data => renderMdSwing(slot, h, a, data));
+  };
 }
 document.getElementById("run-md").onclick = renderMatchday;
 
